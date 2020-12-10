@@ -1,0 +1,10 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.6.1;
+import "./ERC20Like.sol";
+import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+
+abstract contract RocketTokenLike is ERC20Like {
+    function uniswapRouter() public virtual returns (IUniswapV2Router02);
+
+    function tokenUniswapPair() public virtual returns (address);
+}
