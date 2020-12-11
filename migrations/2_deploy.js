@@ -4,7 +4,7 @@ const FeeApprover = artifacts.require('FeeApprover')
 const FeeDistributor = artifacts.require('FeeDistributor')
 const RocketToken = artifacts.require('RocketToken')
 const LiquidVault = artifacts.require('LiquidVault')
-const NFTFund = artifacts.require('NFTFund')
+// const NFTFund = artifacts.require('NFTFund')
 
 const Uniswapfactory = artifacts.require('UniswapV2Factory.sol')
 const UniswapRouter = artifacts.require('UniswapV2Router02.sol')
@@ -20,6 +20,11 @@ const {
 } = process.env
 
 module.exports = async function (deployer, network, accounts) {
+
+
+    if (network === 'development') {
+        return;
+    }
 
     await deployer.deploy(FeeApprover)
     const feeApproverInstance = await FeeApprover.deployed()
