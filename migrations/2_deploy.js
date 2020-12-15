@@ -4,19 +4,10 @@ const FeeApprover = artifacts.require('FeeApprover')
 const FeeDistributor = artifacts.require('FeeDistributor')
 const RocketToken = artifacts.require('RocketToken')
 const LiquidVault = artifacts.require('LiquidVault')
-// const NFTFund = artifacts.require('NFTFund')
 
-const Uniswapfactory = artifacts.require('UniswapV2Factory.sol')
-const UniswapRouter = artifacts.require('UniswapV2Router02.sol')
-const WETH = artifacts.require('WETH')
-
-const fs = require('fs')
 const { 
     UNISWAP_FACTORY, 
-    UNISWAP_ROUTER, 
-    WETH_GANACHE, 
-    UNISWAP_FACTORY_GANACHE, 
-    UNISWAP_ROUTER_GANACHE 
+    UNISWAP_ROUTER
 } = process.env
 
 module.exports = async function (deployer, network, accounts) {
@@ -42,27 +33,17 @@ module.exports = async function (deployer, network, accounts) {
     const liquidVaultInstance = await LiquidVault.deployed()
     await pausePromise('liquidity vault')
     
-
-    if (network === 'development') {
-        await rocketTokenInstance.initialSetup(UNISWAP_ROUTER_GANACHE, UNISWAP_FACTORY_GANACHE, feeApproverInstance.address, feeDistributorInstance.address, liquidVaultInstance.address);
-        await pausePromise('RocketToken initial setup')
-    }
-    else {
-        await rocketTokenInstance.initialSetup(UNISWAP_ROUTER, UNISWAP_FACTORY, feeApproverInstance.address, feeDistributorInstance.address, liquidVaultInstance.address);
-    }
+    await rocketTokenInstance.initialSetup(UNISWAP_ROUTER, UNISWAP_FACTORY, feeApproverInstance.address, feeDistributorInstance.address, liquidVaultInstance.address);
 
     const factoryAddress = await rocketTokenInstance.uniswapFactory.call()
     const routerAddress = await rocketTokenInstance.uniswapRouter.call()
 
-    
-    await deployer.deploy(NFTFund, factoryAddress, routerAddress, rocketTokenInstance.address)
-
     await pausePromise('seed feedistributor')
-    await feeDistributorInstance.seed(rocketTokenInstance.address, liquidVaultInstance.address, NFTFund.address, 40, 1)
+    await feeDistributorInstance.seed(rocketTokenInstance.address, liquidVaultInstance.address, accounts[2], 40, 1)
     await pausePromise('seed fee approver')
     await feeApproverInstance.initialize(rocketTokenInstance.address, factoryAddress, routerAddress, liquidVaultInstance.address)
     await pausePromise('seed liquid vault')
-    await liquidVaultInstance.seed(2, rocketTokenInstance.address, feeDistributorInstance.address, NFTFund.address, 10, 10)
+    await liquidVaultInstance.seed(2, rocketTokenInstance.address, feeDistributorInstance.address, accounts[2], 10, 10)
 }
 
 function pausePromise(message, durationInSeconds = 2) {

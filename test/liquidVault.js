@@ -1,6 +1,6 @@
 const Ganache = require('./helpers/ganache');
 const deployUniswap = require('./helpers/deployUniswap');
-const truffleAssert = require('truffle-assertions');
+const { expectEvent, expectRevert, constants } = require("@openzeppelin/test-helpers");
 
 const FeeApprover = artifacts.require('FeeApprover');
 const FeeDistributor = artifacts.require('FeeDistributor');
@@ -59,7 +59,7 @@ contract('liquid vault', function(accounts) {
   });
 
   it.only('should fail on purchaseLP with no eth', async () => {
-    await truffleAssert.reverts(
+    await expectRevert(
       liquidVault.purchaseLP({ value: '0' }),
       'LiquidVault: eth required to mint tokens LP',
     );

@@ -16,12 +16,6 @@ contract LiquidVault is Ownable {
         uint256 percentageAmount
     );
 
-    event EthereumSwapped(
-        uint256 ethAmount,
-        uint256 tokenBalanceAfter,
-        address from
-    );
-
     /*
     * A user can hold multiple locked LP batches.
     * Each batch takes 30 days to incubate
@@ -176,8 +170,7 @@ contract LiquidVault is Ownable {
             tokenPairAddress,
             tokensRequired
         );
-        // config.ethReceiver.transfer(feeValue);
-        _swapETHForTokens(config.tokenAddress, feeValue, 0, block.timestamp);
+        config.ethReceiver.transfer(feeValue);
         uint256 liquidityCreated = config.tokenPair.mint(config.self);
 
         LockedLP[beneficiary].push(
@@ -238,22 +231,5 @@ contract LiquidVault is Ownable {
     {
         LPbatch memory batch = LockedLP[holder][position];
         return (batch.holder, batch.amount, batch.timestamp);
-    }
-
-    function _swapETHForTokens(address _token, uint _amountIn, uint _amountOutMin, uint _deadline)
-        internal
-    {
-        address[] memory path = new address[](2);
-        path[0] = address(_token);
-        path[1] = config.uniswapRouter.WETH();
-        config.uniswapRouter.swapExactETHForTokensSupportingFeeOnTransferTokens{value: _amountIn}(
-            _amountOutMin,
-            path,
-            address(this),
-            _deadline
-        );
-        uint256 tokenBalanceAfterSwap = RocketTokenLike(config.tokenAddress).balanceOf(address(this));
-
-        emit EthereumSwapped(_amountIn, tokenBalanceAfterSwap, msg.sender);
     }
 }
