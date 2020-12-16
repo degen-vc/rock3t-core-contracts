@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.6.12;
+pragma solidity ^0.7.1;
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/math/SafeMath.sol";
 import "./facades/RocketTokenLike.sol";
 import "./facades/FeeDistributorLike.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
@@ -8,31 +9,21 @@ import "@uniswap/v2-periphery/contracts/interfaces/IWETH.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 
 contract LiquidVault is Ownable {
-
-    event EthereumDeposited(
-        address from, 
-        address to, 
-        uint256 amount, 
-        uint256 percentageAmount
-    );
-
     /*
-    * A user can hold multiple locked LP batches.
-    * Each batch takes 30 days to incubate
+        A user can hold multiple locked LP batches. Each batch takes 30 days to incubate
     */
     event LPQueued(
         address holder,
         uint256 amount,
         uint256 eth,
-        uint256 token,
+        uint256 r3t,
         uint256 timeStamp
     );
 
     event LPClaimed(
         address holder,
         uint256 amount,
-        uint256 timestamp,
-        uint256 exitfee
+        uint256 timestamp
     );
 
     struct LPbatch {
@@ -42,137 +33,169 @@ contract LiquidVault is Ownable {
     }
 
     struct liquidVaultConfig {
-        address tokenAddress;
+        address R3T;
         IUniswapV2Router02 uniswapRouter;
         IUniswapV2Pair tokenPair;
         FeeDistributorLike feeDistributor;
         address self;
         address weth;
-        address payable ethReceiver;
-        uint32 stakeDuration;
-        uint8 donationShare; //0-100
-        uint8 purchaseFee; //0-100
+        uint8 blackHoleShare; //0-100
+        uint8 ethfee;
     }
 
-    bool private locked;
+    struct LockTimeConstants{
+        int scalingWet;
+        int shiftWet;
+        int scalingDry;
+        int shiftDry;
+        uint minLockTime;
+    }
+
+    using SafeMath for uint256;
+
+    bool private unlocked;
+
     modifier lock {
-        require(!locked, "LiquidVault: reentrancy violation");
-        locked = true;
+        require(unlocked, "R3T: reentrancy violation");
+        unlocked = false;
         _;
-        locked = false;
+        unlocked = true;
     }
 
-    liquidVaultConfig public config;
-    //Front end can loop through this and inspect if enough time has passed
-    mapping(address => LPbatch[]) public LockedLP;
 
-    function seed(
-        uint32 duration,
-        address _tokenAddress,
-        address feeDistributor,
-        address payable ethReceiver,
-        uint8 donationShare, // LP Token
-        uint8 purchaseFee // ETH
-    ) public onlyOwner {
-        config.tokenAddress = _tokenAddress;
-        config.uniswapRouter = IUniswapV2Router02(
-            RocketTokenLike(_tokenAddress).uniswapRouter()
-        );
-        config.tokenPair = IUniswapV2Pair(
-            RocketTokenLike(_tokenAddress).tokenUniswapPair()
-        );
-        config.feeDistributor = FeeDistributorLike(feeDistributor);
-        config.weth = config.uniswapRouter.WETH();
-        config.self = address(this);
-        setEthFeeAddress(ethReceiver);
-        setParameters(duration, donationShare, purchaseFee);
-    }
-
-    function calculateTokensRequired(uint256 value)
-        public
-        view
-        returns (uint256 feeValue, uint256 exchangeValue, uint256 tokensRequired)
+    //L = (scalingWet/(mwet + shiftWet)) + (scalingDy/(mdry +shiftDry)) + C
+    //mwet = eth value of tokens in liquidvault
+    //mdry = eth in uniswap pool
+    modifier updateLockTime
     {
-        feeValue = config.purchaseFee * value / 100;
-        exchangeValue = value - feeValue;
+        uint R3TinVault = IERC20(config.R3T).balanceOf(address(this));
+        uint ethInUniswap = address(config.tokenPair).balance;
+        (address token0, ) = config.R3T < config.weth
+            ? (config.R3T, config.weth)
+            : (config.weth, config.R3T);
 
-        (address token0, ) = config.tokenAddress < config.weth
-            ? (config.tokenAddress, config.weth)
-            : (config.weth, config.tokenAddress);
+        uint ethValueOfTokens = 0;
         (uint256 reserve1, uint256 reserve2, ) = config.tokenPair.getReserves();
-        tokensRequired = 0;
-
-        if (config.tokenPair.totalSupply() == 0) {
-            tokensRequired = RocketTokenLike(config.tokenAddress).balanceOf(
-                address(this)
-            );
-        } else if (token0 == config.tokenAddress) {
-            tokensRequired = config.uniswapRouter.quote(
-                exchangeValue,
-                reserve2,
-                reserve1
-            );
-        } else {
-            tokensRequired = config.uniswapRouter.quote(
-                exchangeValue,
+        if (token0 == config.R3T) {
+            ethValueOfTokens = config.uniswapRouter.quote(
+                R3TinVault,
                 reserve1,
                 reserve2
             );
+        } else {
+            ethValueOfTokens = config.uniswapRouter.quote(R3TinVault, reserve2, reserve1);
         }
+        {
+            (int mwet, int mdry) = (int(ethValueOfTokens),int(ethInUniswap));
+            GlobalLPLockTime = uint((CONSTANTS.scalingWet/(mwet + CONSTANTS.shiftWet)) + (CONSTANTS.scalingDry/(mdry +CONSTANTS.shiftDry)) + int(CONSTANTS.minLockTime));
+
+        }
+        _;
     }
 
-    function setEthFeeAddress(address payable ethReceiver)
-        public
-        onlyOwner
-    {
-        require(
-            ethReceiver != address(0),
-            "LiquidVault: eth receiver is zero address"
-        );
+    liquidVaultConfig public config;
 
-        config.ethReceiver = ethReceiver;
+    uint256 public GlobalLPLockTime;
+    address public treasury;
+    LockTimeConstants CONSTANTS;
+    mapping(address => LPbatch[]) public LockedLP;
+
+    constructor(){
+        CONSTANTS.scalingWet = 32171437;
+        CONSTANTS.shiftWet = 199286;
+        CONSTANTS.scalingDry = 2568182;
+        CONSTANTS.shiftDry = -256597;
+        CONSTANTS.minLockTime=1;
+        unlocked=true;
     }
 
-    function setParameters(uint32 duration, uint8 donationShare, uint8 purchaseFee)
-        public
-        onlyOwner
-    {
-        require(
-            donationShare <= 100,
-            "LiquidVault: donation share % between 0 and 100"
-        );
-        require(
-            purchaseFee <= 100,
-            "LiquidVault: purchase fee share % between 0 and 100"
-        );
-
-        config.stakeDuration = duration * 1 days;
-        config.donationShare = donationShare;
-        config.purchaseFee = purchaseFee;
+    function seed(
+        address r3t,
+        address feeDistributor,
+        uint8 blackHoleShare,
+        address uniswapRouter,
+        address uniswapPair,
+        uint8 ethfee,
+        address _treasury
+    ) public onlyOwner {
+        config.R3T = r3t;
+        config.feeDistributor = FeeDistributorLike(feeDistributor);
+        config.tokenPair = IUniswapV2Pair(uniswapPair);
+        config.uniswapRouter = IUniswapV2Router02(uniswapRouter);
+        config.weth = config.uniswapRouter.WETH();
+        config.self = address(this);
+        config.blackHoleShare = blackHoleShare;
+        treasury = _treasury;
+        require(ethfee <= 40, "R3T: eth fee cannot exceed 40%");
     }
 
-    function purchaseLPFor(address beneficiary) public payable lock {
+    function flushToTreasury(uint amount) public onlyOwner {
+        require(treasury != address(0),"R3T: treasury not set");
+        IERC20(config.R3T).transfer(treasury,amount);
+    }
+
+    function setLockTimeConstants(int scalingWet, int shiftWet, int scalingDry, int shiftDry, uint minLockTime) public onlyOwner{
+        CONSTANTS.scalingWet = scalingWet;
+        CONSTANTS.shiftWet = shiftWet;
+        CONSTANTS.scalingDry = scalingDry;
+        CONSTANTS.shiftDry = shiftDry;
+        CONSTANTS.minLockTime=minLockTime;
+    }
+
+struct PurchaseLPVariables {
+    uint ethFee;
+    uint netEth;
+    uint reserve1;
+    uint reserve2;
+}
+
+
+    function purchaseLPFor(address beneficiary) public payable lock updateLockTime {
         config.feeDistributor.distributeFees();
-        require(msg.value > 0, "LiquidVault: eth required to mint tokens LP");
+        require(msg.value > 0, "R3T: eth required to mint R3T LP");
+        PurchaseLPVariables memory VARS;
+        VARS.ethFee = msg.value.mul(config.ethfee).div(100);
+         VARS.netEth = msg.value.sub(VARS.ethFee);
 
-        (uint256 feeValue, uint256 exchangeValue, uint256 tokensRequired) = calculateTokensRequired(msg.value);
+        (address token0, ) = config.R3T < config.weth
+            ? (config.R3T, config.weth)
+            : (config.weth, config.R3T);
+             uint256 r3tRequired = 0;
+        
+            (VARS.reserve1,VARS.reserve2, ) = config.tokenPair.getReserves();
+        
 
-        uint256 balance = RocketTokenLike(config.tokenAddress).balanceOf(config.self);
-        require(
-            balance >= tokensRequired,
-            "LiquidVault: insufficient tokens in LiquidVault"
-        );
+            if (config.tokenPair.totalSupply() == 0) {
+                r3tRequired = IERC20(config.R3T).balanceOf(address(this));
+            } else if (token0 == config.R3T) {
+                r3tRequired = config.uniswapRouter.quote(
+                    VARS.netEth,
+                    VARS.reserve2,
+                    VARS.reserve1
+                );
+            } else {
+                r3tRequired = config.uniswapRouter.quote(VARS.netEth, VARS.reserve1, VARS.reserve2);
+            }
+        
+        uint256 balance = IERC20(config.R3T).balanceOf(config.self);
+        require(balance >= r3tRequired, "R3T: insufficient R3T in LiquidVault");
 
-        IWETH(config.weth).deposit{ value: exchangeValue }();
+        IWETH(config.weth).deposit{value: msg.value}();
         address tokenPairAddress = address(config.tokenPair);
-        IWETH(config.weth).transfer(tokenPairAddress, exchangeValue);
-        RocketTokenLike(config.tokenAddress).transfer(
-            tokenPairAddress,
-            tokensRequired
-        );
-        config.ethReceiver.transfer(feeValue);
-        uint256 liquidityCreated = config.tokenPair.mint(config.self);
+        IWETH(config.weth).transfer(tokenPairAddress, VARS.netEth);
+        IERC20(config.R3T).transfer(tokenPairAddress, r3tRequired);
 
+        uint256 liquidityCreated = config.tokenPair.mint(config.self);
+        {
+            address[] memory path;
+            path[0] = config.R3T;
+            config.uniswapRouter.swapExactETHForTokens{value:VARS.ethFee}(
+               VARS.ethFee,
+                path,
+                address(this),
+                0
+            );
+        }
         LockedLP[beneficiary].push(
             LPbatch({
                 holder: beneficiary,
@@ -184,36 +207,31 @@ contract LiquidVault is Ownable {
         emit LPQueued(
             beneficiary,
             liquidityCreated,
-            exchangeValue,
-            tokensRequired,
+            VARS.netEth,
+            r3tRequired,
             block.timestamp
         );
-
-        emit EthereumDeposited(msg.sender, config.ethReceiver, exchangeValue, feeValue);
     }
 
     //send eth to match with HCORE tokens in LiquidVault
     function purchaseLP() public payable {
-        this.purchaseLPFor{ value: msg.value }(msg.sender);
+        this.purchaseLPFor{value: msg.value}(msg.sender);
     }
 
     //pops latest LP if older than period
-    function claimLP() public returns (bool) {
+    function claimLP() public updateLockTime returns (bool)  {
         uint256 length = LockedLP[msg.sender].length;
-        require(length > 0, "LiquidVault: No locked LP.");
+        require(length > 0, "R3T: No locked LP.");
         LPbatch memory batch = LockedLP[msg.sender][length - 1];
         require(
-            block.timestamp - batch.timestamp > config.stakeDuration,
-            "LiquidVault: LP still locked."
+            block.timestamp - batch.timestamp > GlobalLPLockTime,
+            "R3T: LP still locked."
         );
         LockedLP[msg.sender].pop();
-        uint256 donation = (config.donationShare * batch.amount) / 100;
-        emit LPClaimed(msg.sender, batch.amount, block.timestamp, donation);
-        require(
-            config.tokenPair.transfer(address(0), donation),
-            "LiquidVault: donation transfer failed in LP claim."
-        );
-        return config.tokenPair.transfer(batch.holder, batch.amount - donation);
+        emit LPClaimed(msg.sender, batch.amount, block.timestamp);
+        uint blackholeDonation = (config.blackHoleShare * batch.amount).div(100);
+        config.tokenPair.transfer(address(0), blackholeDonation);
+        return config.tokenPair.transfer(batch.holder, batch.amount-blackholeDonation);
     }
 
     function lockedLPLength(address holder) public view returns (uint256) {
