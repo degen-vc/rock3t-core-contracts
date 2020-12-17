@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.7.1;
+pragma experimental ABIEncoderV2;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -15,7 +16,7 @@ contract LiquidVault is Ownable {
 
     uint256 public globalLPLockTime;
     address public treasury;
-    LockTimeConstants CONSTANTS;
+    LockTimeConstants public CONSTANTS;
     mapping(address => LPbatch[]) public LockedLP;
 
     bool private unlocked;
