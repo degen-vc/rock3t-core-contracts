@@ -63,7 +63,7 @@ contract('liquid vault', function(accounts) {
     await ganache.snapshot();
   });
 
-  it.only('should set all values after LV setup', async () => {
+  it('should set all values after LV setup', async () => {
     const config = await liquidVault.config();
 
     assert.equal(config.R3T, rocketToken.address);
@@ -77,7 +77,7 @@ contract('liquid vault', function(accounts) {
     // assert.equal(config.ethfee, rocketToken.address);
   });
 
-  it.only('should set initial formula constants after deploy', async () => {
+  it('should set initial formula constants after deploy', async () => {
     const constants = await liquidVault.CONSTANTS();
 
     assertBNequal(constants.scalingWet, '32171437');
@@ -87,7 +87,7 @@ contract('liquid vault', function(accounts) {
     assertBNequal(constants.minLockTime, '1');
   });
 
-  it.only('should be possible to update formula constants for owner', async () => {
+  it('should be possible to update formula constants for owner', async () => {
 
     await liquidVault.setLockTimeConstants(1, 2, 3, 4, 5);
 
@@ -100,7 +100,7 @@ contract('liquid vault', function(accounts) {
     assertBNequal(constants.minLockTime, 5);
   });
 
-  it.only('should NOT be possible to update formula constants for NOT owner', async () => {
+  it('should NOT be possible to update formula constants for NOT owner', async () => {
     await expectRevert(
       liquidVault.setLockTimeConstants(1, 2, 3, 4, 5, {from: NOT_OWNER}),
       'Ownable: caller is not the owner',
@@ -110,7 +110,7 @@ contract('liquid vault', function(accounts) {
     assertBNequal(constants.scalingWet, '32171437');
   });
 
-  it.only('should be possible to flush to treasury from owner', async () => {
+  it('should be possible to flush to treasury from owner', async () => {
     const amount = 10000;
     await rocketToken.transfer(liquidVault.address, amount);
 
@@ -123,7 +123,7 @@ contract('liquid vault', function(accounts) {
     assertBNequal(await rocketToken.balanceOf(treasury), amount);
   });
 
-  it.only('should NOT possible to flush to treasury from NOT owner', async () => {
+  it('should NOT possible to flush to treasury from NOT owner', async () => {
     const amount = 10000;
     await rocketToken.transfer(liquidVault.address, amount);
 
@@ -150,7 +150,7 @@ contract('liquid vault', function(accounts) {
   // 2. Add initialSetup to rocket token with adding pair on uniswap
   // 3. Add liquidity to the rocket pair
 
-  // it.only('should fail on purchaseLP with no eth', async () => {
+  // it('should fail on purchaseLP with no eth', async () => {
   //   await expectRevert(
   //     liquidVault.purchaseLP({ value: '0' }),
   //     'R3T: eth required to mint R3T LP',
