@@ -21,7 +21,7 @@ contract('liquid vault', function(accounts) {
 
   const ethFee = 0 // 1%;
   const blackHoleFee = 10 // 1%;
-  const lvEthFee = 10 // 1%;
+  const lvEthFeePercent = 10 // 1%;
   const feeReceiver = accounts[8];
   const treasury = accounts[7];
 
@@ -56,7 +56,7 @@ contract('liquid vault', function(accounts) {
       blackHoleFee,
       uniswapRouter.address,
       uniswapPair,
-      lvEthFee,
+      lvEthFeePercent,
       treasury
     );
 
@@ -74,7 +74,7 @@ contract('liquid vault', function(accounts) {
     assert.equal(config.self, liquidVault.address);
     assert.equal(config.blackHoleShare, blackHoleFee);
     assert.equal(treasury, treasury);
-    // assert.equal(config.ethfee, rocketToken.address);
+    assertBNequal(config.ethFeePercentage, lvEthFeePercent);
   });
 
   it('should set initial formula constants after deploy', async () => {
