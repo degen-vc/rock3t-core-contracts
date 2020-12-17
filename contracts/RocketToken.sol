@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity ^0.7.1;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
+
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
+import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 
 contract RocketToken is IERC20, Ownable {
     using SafeMath for uint;
@@ -15,25 +18,31 @@ contract RocketToken is IERC20, Ownable {
 
     FeeConfig config;
     uint256 _totalSupply;
+
+    IUniswapV2Factory public factory;
+    IUniswapV2Router02 public router;
+
+    address public tokenUniswapPair;
+
     mapping(address => uint256) balances;
     mapping(address => mapping(address => uint256)) allowances;
 
     string public name = "ROCK3T 3t.finance";
     string public symbol = "R3T";
 
-    function decimals() external view returns (uint8) {
-        return 18;
-    }
-    constructor(uint16 fee, address destination) {
+    constructor(uint16 fee, address destination, address _router, address _factory) {
         _totalSupply = 11e6;
         balances[msg.sender] = _totalSupply;
         config.fee = fee;
         config.destination = destination;
+        router = IUniswapV2Router02(_router);
+        factory = IUniswapV2Factory(_factory);
+
+        createUniswapPair();
     }
 
-    function configureFee(uint16 fee, address destination) public onlyOwner {
-        config.fee = fee;
-        config.destination = destination;
+    function decimals() external view returns (uint8) {
+        return 18;
     }
 
     function totalSupply() external override view returns (uint256) {
@@ -86,6 +95,20 @@ contract RocketToken is IERC20, Ownable {
         );
         _transfer(sender, recipient, amount);
         return true;
+    }
+
+    function createUniswapPair() public returns (address) {
+        require(tokenUniswapPair == address(0), "Token: pool already created");
+        tokenUniswapPair = factory.createPair(
+            address(router.WETH()),
+            address(this)
+        );
+        return tokenUniswapPair;
+    }
+
+    function configureFee(uint16 fee, address destination) public onlyOwner {
+        config.fee = fee;
+        config.destination = destination;
     }
 
     function burn(uint256 amount) public {
