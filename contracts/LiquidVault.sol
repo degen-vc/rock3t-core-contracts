@@ -13,7 +13,7 @@ contract LiquidVault is Ownable {
 
     liquidVaultConfig public config;
 
-    uint256 public GlobalLPLockTime;
+    uint256 public globalLPLockTime;
     address public treasury;
     LockTimeConstants CONSTANTS;
     mapping(address => LPbatch[]) public LockedLP;
@@ -89,28 +89,7 @@ contract LiquidVault is Ownable {
     //mwet = eth value of tokens in liquidvault
     //mdry = eth in uniswap pool
     modifier updateLockTime {
-        uint R3TinVault = IERC20(config.R3T).balanceOf(address(this));
-        uint ethInUniswap = IERC20(config.tokenPair).balanceOf(address(this));
-        (address token0, ) = config.R3T < config.weth
-            ? (config.R3T, config.weth)
-            : (config.weth, config.R3T);
-
-        uint ethValueOfTokens = 0;
-        (uint256 reserve1, uint256 reserve2, ) = config.tokenPair.getReserves();
-        if (token0 == config.R3T) {
-            ethValueOfTokens = config.uniswapRouter.quote(
-                R3TinVault,
-                reserve1,
-                reserve2
-            );
-        } else {
-            ethValueOfTokens = config.uniswapRouter.quote(R3TinVault, reserve2, reserve1);
-        }
-        {
-            (int mwet, int mdry) = (int(ethValueOfTokens),int(ethInUniswap));
-            GlobalLPLockTime = uint((CONSTANTS.scalingWet/(mwet + CONSTANTS.shiftWet)) + (CONSTANTS.scalingDry/(mdry +CONSTANTS.shiftDry)) + int(CONSTANTS.minLockTime));
-
-        }
+        _calculateLockPeriod();
         _;
     }
 
@@ -134,6 +113,10 @@ contract LiquidVault is Ownable {
         config.blackHoleShare = blackHoleShare;
         config.ethFeePercentage = ethFeePercentage;
         treasury = _treasury;
+    }
+
+    function getLockedPeriod() external view returns (uint256) {
+        return _calculateLockPeriod();
     }
 
     function flushToTreasury(uint amount) public onlyOwner {
@@ -228,7 +211,7 @@ contract LiquidVault is Ownable {
         require(length > 0, "R3T: No locked LP.");
         LPbatch memory batch = LockedLP[msg.sender][length - 1];
         require(
-            block.timestamp - batch.timestamp > GlobalLPLockTime,
+            block.timestamp - batch.timestamp > globalLPLockTime,
             "R3T: LP still locked."
         );
         LockedLP[msg.sender].pop();
@@ -253,5 +236,30 @@ contract LiquidVault is Ownable {
     {
         LPbatch memory batch = LockedLP[holder][position];
         return (batch.holder, batch.amount, batch.timestamp);
+    }
+
+    function _calculateLockPeriod() internal view returns (uint256 globalLPLockTime) {
+        uint R3TinVault = IERC20(config.R3T).balanceOf(address(this));
+        uint ethInUniswap = config.tokenPair.balanceOf(address(this));
+        (address token0, ) = config.R3T < config.weth
+            ? (config.R3T, config.weth)
+            : (config.weth, config.R3T);
+
+        uint ethValueOfTokens = 0;
+        (uint256 reserve1, uint256 reserve2, ) = config.tokenPair.getReserves();
+        if (token0 == config.R3T) {
+            ethValueOfTokens = config.uniswapRouter.quote(
+                R3TinVault,
+                reserve1,
+                reserve2
+            );
+        } else {
+            ethValueOfTokens = config.uniswapRouter.quote(R3TinVault, reserve2, reserve1);
+        }
+        {
+            (int mwet, int mdry) = (int(ethValueOfTokens),int(ethInUniswap));
+            globalLPLockTime = uint((CONSTANTS.scalingWet/(mwet + CONSTANTS.shiftWet)) + (CONSTANTS.scalingDry/(mdry +CONSTANTS.shiftDry)) + int(CONSTANTS.minLockTime));
+
+        }
     }
 }
