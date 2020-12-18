@@ -71,10 +71,10 @@ contract LiquidVault is Ownable {
     );
 
     constructor() {
-        CONSTANTS.scalingWet = 32171437;
-        CONSTANTS.shiftWet = 199286;
-        CONSTANTS.scalingDry = 2568182;
-        CONSTANTS.shiftDry = -256597;
+        CONSTANTS.scalingWet = 11344;
+        CONSTANTS.shiftWet = -3;
+        CONSTANTS.scalingDry = -191;
+        CONSTANTS.shiftDry = -217;
         CONSTANTS.minLockTime = 1;
         unlocked = true;
     }

@@ -6,6 +6,8 @@ const { expectEvent, expectRevert, constants } = require("@openzeppelin/test-hel
 const FeeDistributor = artifacts.require('FeeDistributor');
 const RocketToken = artifacts.require('RocketToken');
 const LiquidVault = artifacts.require('LiquidVault');
+const IUniswapV2Pair = artifacts.require('IUniswapV2Pair');
+
 
 contract('liquid vault', function(accounts) {
   const ganache = new Ganache(web3);
@@ -18,6 +20,7 @@ contract('liquid vault', function(accounts) {
   const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
   const NOT_OWNER = accounts[1];
   const nftFund = accounts[9];
+  const baseUnit = bn('1000000000000000000');
 
   const ethFee = 0 // 1%;
   const blackHoleFee = 10 // 1%;
@@ -63,85 +66,136 @@ contract('liquid vault', function(accounts) {
     await ganache.snapshot();
   });
 
-  it('should set all values after LV setup', async () => {
-    const config = await liquidVault.config();
+  describe('General tests', async () => {
+    it('should set all values after LV setup', async () => {
+      const config = await liquidVault.config();
 
-    assert.equal(config.R3T, rocketToken.address);
-    assert.equal(config.feeDistributor, feeDistributor.address);
-    assert.equal(config.tokenPair, uniswapPair);
-    assert.equal(config.uniswapRouter, uniswapRouter.address);
-    assert.equal(config.weth, weth.address);
-    assert.equal(config.self, liquidVault.address);
-    assert.equal(config.blackHoleShare, blackHoleFee);
-    assert.equal(treasury, treasury);
-    assertBNequal(config.ethFeePercentage, lvEthFeePercent);
+      assert.equal(config.R3T, rocketToken.address);
+      assert.equal(config.feeDistributor, feeDistributor.address);
+      assert.equal(config.tokenPair, uniswapPair);
+      assert.equal(config.uniswapRouter, uniswapRouter.address);
+      assert.equal(config.weth, weth.address);
+      assert.equal(config.self, liquidVault.address);
+      assert.equal(config.blackHoleShare, blackHoleFee);
+      assert.equal(treasury, treasury);
+      assertBNequal(config.ethFeePercentage, lvEthFeePercent);
+    });
+
+    it('should set initial formula constants after deploy', async () => {
+      const constants = await liquidVault.CONSTANTS();
+
+      assertBNequal(constants.scalingWet, '11344');
+      assertBNequal(constants.shiftWet, '-3');
+      assertBNequal(constants.scalingDry, '-191');
+      assertBNequal(constants.shiftDry, '-217');
+      assertBNequal(constants.minLockTime, '1');
+    });
+
+    it('should be possible to update formula constants for owner', async () => {
+
+      await liquidVault.setLockTimeConstants(1, 2, 3, 4, 5);
+
+      const constants = await liquidVault.CONSTANTS();
+
+      assertBNequal(constants.scalingWet, 1);
+      assertBNequal(constants.shiftWet, 2);
+      assertBNequal(constants.scalingDry, 3);
+      assertBNequal(constants.shiftDry, 4);
+      assertBNequal(constants.minLockTime, 5);
+    });
+
+    it('should NOT be possible to update formula constants for NOT owner', async () => {
+      await expectRevert(
+        liquidVault.setLockTimeConstants(1, 2, 3, 4, 5, {from: NOT_OWNER}),
+        'Ownable: caller is not the owner',
+      );
+
+      const constants = await liquidVault.CONSTANTS();
+      assertBNequal(constants.scalingWet, '11344');
+    });
+
+    it('should be possible to flush to treasury from owner', async () => {
+      const amount = 10000;
+      await rocketToken.transfer(liquidVault.address, amount);
+
+      assertBNequal(await rocketToken.balanceOf(liquidVault.address), amount);
+      assertBNequal(await rocketToken.balanceOf(treasury), 0);
+
+      await liquidVault.flushToTreasury(amount);
+
+      assertBNequal(await rocketToken.balanceOf(liquidVault.address), 0);
+      assertBNequal(await rocketToken.balanceOf(treasury), amount);
+    });
+
+    it('should NOT possible to flush to treasury from NOT owner', async () => {
+      const amount = 10000;
+      await rocketToken.transfer(liquidVault.address, amount);
+
+      assertBNequal(await rocketToken.balanceOf(liquidVault.address), amount);
+      assertBNequal(await rocketToken.balanceOf(treasury), 0);
+
+      await expectRevert(
+        liquidVault.flushToTreasury(amount, {from: NOT_OWNER}),
+        'Ownable: caller is not the owner',
+      );
+
+      assertBNequal(await rocketToken.balanceOf(liquidVault.address), amount);
+      assertBNequal(await rocketToken.balanceOf(treasury), 0);
+    });
+
+    it('it should NOT be possible to add pair 2nd time', async () => {
+      await expectRevert(
+        rocketToken.createUniswapPair(),
+        'Token: pool already created',
+      );
+    });
+
+    it.only('should be possible to add liquidity on pair', async () => {
+      const liquidityTokensAmount = bn('10000').mul(baseUnit); // 10.000 tokens
+      const liquidityEtherAmount = bn('5').mul(baseUnit); // 5 ETH
+
+      const pairAddress = await rocketToken.tokenUniswapPair();
+      const pair = await IUniswapV2Pair.at(pairAddress);
+
+      const reservesBefore = await pair.getReserves();
+      assertBNequal(reservesBefore[0], 0);
+      assertBNequal(reservesBefore[1], 0);
+      
+      await rocketToken.approve(uniswapRouter.address, liquidityTokensAmount);
+      console.log((await rocketToken.allowance(OWNER, uniswapRouter.address)).toString());
+      await uniswapRouter.addLiquidityETH(
+        rocketToken.address,
+        liquidityTokensAmount,
+        0,
+        0,
+        OWNER,
+        new Date().getTime() + 3000,
+        {value: liquidityEtherAmount}
+      );
+
+      //TODO Check which reserve 0 and reserve 1 and then make assertions
+      const reservesAfter = await pair.getReserves();
+      assertBNequal(reservesAfter[0], liquidityTokensAmount);
+      assertBNequal(reservesAfter[1], liquidityEtherAmount);
+    });
   });
 
-  it('should set initial formula constants after deploy', async () => {
-    const constants = await liquidVault.CONSTANTS();
+  describe('Lock period', async () => {
 
-    assertBNequal(constants.scalingWet, '32171437');
-    assertBNequal(constants.shiftWet, '199286');
-    assertBNequal(constants.scalingDry, '2568182');
-    assertBNequal(constants.shiftDry, '-256597');
-    assertBNequal(constants.minLockTime, '1');
   });
 
-  it('should be possible to update formula constants for owner', async () => {
+  // function addLiquidityETH(
+  //   address token,
+  //   uint amountTokenDesired,
+  //   uint amountTokenMin,
+  //   uint amountETHMin,
+  //   address to,
+  //   uint deadline
+  // )
 
-    await liquidVault.setLockTimeConstants(1, 2, 3, 4, 5);
-
-    const constants = await liquidVault.CONSTANTS();
-
-    assertBNequal(constants.scalingWet, 1);
-    assertBNequal(constants.shiftWet, 2);
-    assertBNequal(constants.scalingDry, 3);
-    assertBNequal(constants.shiftDry, 4);
-    assertBNequal(constants.minLockTime, 5);
-  });
-
-  it('should NOT be possible to update formula constants for NOT owner', async () => {
-    await expectRevert(
-      liquidVault.setLockTimeConstants(1, 2, 3, 4, 5, {from: NOT_OWNER}),
-      'Ownable: caller is not the owner',
-    );
-
-    const constants = await liquidVault.CONSTANTS();
-    assertBNequal(constants.scalingWet, '32171437');
-  });
-
-  it('should be possible to flush to treasury from owner', async () => {
-    const amount = 10000;
-    await rocketToken.transfer(liquidVault.address, amount);
-
-    assertBNequal(await rocketToken.balanceOf(liquidVault.address), amount);
-    assertBNequal(await rocketToken.balanceOf(treasury), 0);
-
-    await liquidVault.flushToTreasury(amount);
-
-    assertBNequal(await rocketToken.balanceOf(liquidVault.address), 0);
-    assertBNequal(await rocketToken.balanceOf(treasury), amount);
-  });
-
-  it('should NOT possible to flush to treasury from NOT owner', async () => {
-    const amount = 10000;
-    await rocketToken.transfer(liquidVault.address, amount);
-
-    assertBNequal(await rocketToken.balanceOf(liquidVault.address), amount);
-    assertBNequal(await rocketToken.balanceOf(treasury), 0);
-
-    await expectRevert(
-      liquidVault.flushToTreasury(amount, {from: NOT_OWNER}),
-      'Ownable: caller is not the owner',
-    );
-
-    assertBNequal(await rocketToken.balanceOf(liquidVault.address), amount);
-    assertBNequal(await rocketToken.balanceOf(treasury), 0);
-  });
+  // getReserves
 
 
-
-  // it should be possible to add liquidity on pair
 
 
   // TODO
