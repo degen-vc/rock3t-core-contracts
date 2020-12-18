@@ -162,7 +162,6 @@ contract('liquid vault', function(accounts) {
       assertBNequal(reservesBefore[1], 0);
       
       await rocketToken.approve(uniswapRouter.address, liquidityTokensAmount);
-      console.log((await rocketToken.allowance(OWNER, uniswapRouter.address)).toString());
       await uniswapRouter.addLiquidityETH(
         rocketToken.address,
         liquidityTokensAmount,
@@ -173,10 +172,15 @@ contract('liquid vault', function(accounts) {
         {value: liquidityEtherAmount}
       );
 
-      //TODO Check which reserve 0 and reserve 1 and then make assertions
       const reservesAfter = await pair.getReserves();
-      assertBNequal(reservesAfter[0], liquidityTokensAmount);
-      assertBNequal(reservesAfter[1], liquidityEtherAmount);
+
+      if (await pair.token0() == rocketToken.address) {
+        assertBNequal(reservesAfter[0], liquidityTokensAmount);
+        assertBNequal(reservesAfter[1], liquidityEtherAmount);
+      } else {
+        assertBNequal(reservesAfter[0], liquidityEtherAmount);
+        assertBNequal(reservesAfter[1], liquidityTokensAmount);
+      }
     });
   });
 
