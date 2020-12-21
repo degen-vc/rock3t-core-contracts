@@ -8,6 +8,7 @@ import "./facades/FeeDistributorLike.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IWETH.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
+import '@uniswap/v2-periphery/contracts/libraries/UniswapV2OracleLibrary.sol';
 
 contract LiquidVault is Ownable {
     using SafeMath for uint256;
@@ -120,16 +121,31 @@ contract LiquidVault is Ownable {
         return _calculateLockPeriod();
     }
 
+    function getCurrentTokenPrice() external view returns (uint256) {
+        (uint256 _price0Cumulative, uint256 _price1Cumulative, uint32 _blockTimestamp) =
+            UniswapV2OracleLibrary.currentCumulativePrices(address(config.tokenPair));
+
+        (address token0, ) = config.R3T < config.weth
+            ? (config.R3T, config.weth)
+            : (config.weth, config.R3T);
+
+        if (token0 == config.R3T) {
+            return _price0Cumulative;
+        } else {
+            return _price1Cumulative;
+        }
+    }
+
     function flushToTreasury(uint amount) public onlyOwner {
         require(treasury != address(0),"R3T: treasury not set");
         IERC20(config.R3T).transfer(treasury,amount);
     }
 
     function setLockTimeConstants(
-        int scalingWet, 
-        int shiftWet, 
-        int scalingDry, 
-        int shiftDry, 
+        int scalingWet,
+        int shiftWet,
+        int scalingDry,
+        int shiftDry,
         uint minLockTime
     ) public onlyOwner {
         CONSTANTS.scalingWet = scalingWet;
@@ -143,19 +159,17 @@ contract LiquidVault is Ownable {
         config.feeDistributor.distributeFees();
         require(msg.value > 0, "R3T: eth required to mint R3T LP");
         PurchaseLPVariables memory VARS;
-        VARS.ethFee = msg.value.mul(config.ethFeePercentage).div(100);
-         VARS.netEth = msg.value.sub(VARS.ethFee);
+        VARS.ethFee = msg.value.mul(config.ethFeePercentage).div(1000);
+        VARS.netEth = msg.value.sub(VARS.ethFee);
 
         (address token0, ) = config.R3T < config.weth
             ? (config.R3T, config.weth)
             : (config.weth, config.R3T);
              uint256 r3tRequired = 0;
-        
+
             (VARS.reserve1,VARS.reserve2, ) = config.tokenPair.getReserves();
-        
-            if (config.tokenPair.totalSupply() == 0) {
-                r3tRequired = IERC20(config.R3T).balanceOf(address(this));
-            } else if (token0 == config.R3T) {
+
+            if (token0 == config.R3T) {
                 r3tRequired = config.uniswapRouter.quote(
                     VARS.netEth,
                     VARS.reserve2,
@@ -164,26 +178,32 @@ contract LiquidVault is Ownable {
             } else {
                 r3tRequired = config.uniswapRouter.quote(VARS.netEth, VARS.reserve1, VARS.reserve2);
             }
-        
+
         uint256 balance = IERC20(config.R3T).balanceOf(config.self);
         require(balance >= r3tRequired, "R3T: insufficient R3T in LiquidVault");
 
-        IWETH(config.weth).deposit{value: msg.value}();
+        IWETH(config.weth).deposit{value: VARS.netEth}();
         address tokenPairAddress = address(config.tokenPair);
         IWETH(config.weth).transfer(tokenPairAddress, VARS.netEth);
         IERC20(config.R3T).transfer(tokenPairAddress, r3tRequired);
 
+
         uint256 liquidityCreated = config.tokenPair.mint(config.self);
+
         {
-            address[] memory path;
-            path[0] = config.R3T;
-            config.uniswapRouter.swapExactETHForTokens{value:VARS.ethFee}(
-               VARS.ethFee,
+            address[] memory path = new address[](2);
+            path[0] = config.weth;
+            path[1] = config.R3T;
+
+            config.uniswapRouter.swapExactETHForTokens{ value:VARS.ethFee }(
+                0,
                 path,
                 address(this),
-                0
+                7258118400
             );
         }
+
+
         LockedLP[beneficiary].push(
             LPbatch({
                 holder: beneficiary,
@@ -217,7 +237,7 @@ contract LiquidVault is Ownable {
         );
         LockedLP[msg.sender].pop();
         emit LPClaimed(msg.sender, batch.amount, block.timestamp);
-        uint blackholeDonation = (config.blackHoleShare * batch.amount).div(100);
+        uint blackholeDonation = (config.blackHoleShare * batch.amount).div(1000);
         config.tokenPair.transfer(address(0), blackholeDonation);
         return config.tokenPair.transfer(batch.holder, batch.amount-blackholeDonation);
     }
@@ -240,6 +260,9 @@ contract LiquidVault is Ownable {
     }
 
     function _calculateLockPeriod() internal view returns (uint256 globalLPLockTime) {
+        // WIP
+        return 10;
+
         uint R3TinVault = IERC20(config.R3T).balanceOf(address(this));
         uint ethInUniswap = config.tokenPair.balanceOf(address(this));
         (address token0, ) = config.R3T < config.weth
@@ -247,20 +270,18 @@ contract LiquidVault is Ownable {
             : (config.weth, config.R3T);
 
         uint ethValueOfTokens = 0;
-        (uint256 reserve1, uint256 reserve2, ) = config.tokenPair.getReserves();
+        (uint256 reserve0, uint256 reserve1, ) = config.tokenPair.getReserves();
+
         if (token0 == config.R3T) {
             ethValueOfTokens = config.uniswapRouter.quote(
                 R3TinVault,
-                reserve1,
-                reserve2
+                reserve0,
+                reserve1
             );
         } else {
-            ethValueOfTokens = config.uniswapRouter.quote(R3TinVault, reserve2, reserve1);
+            ethValueOfTokens = config.uniswapRouter.quote(R3TinVault, reserve1, reserve0);
         }
-        {
-            (int mwet, int mdry) = (int(ethValueOfTokens),int(ethInUniswap));
-            globalLPLockTime = uint((CONSTANTS.scalingWet/(mwet + CONSTANTS.shiftWet)) + (CONSTANTS.scalingDry/(mdry +CONSTANTS.shiftDry)) + int(CONSTANTS.minLockTime));
-
-        }
+        (int mwet, int mdry) = (int(ethValueOfTokens), int(ethInUniswap));
+        globalLPLockTime = uint((CONSTANTS.scalingWet / (mwet + CONSTANTS.shiftWet)) + (CONSTANTS.scalingDry / (mdry +CONSTANTS.shiftDry)) + int(CONSTANTS.minLockTime));
     }
 }

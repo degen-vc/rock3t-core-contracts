@@ -64,6 +64,7 @@ contract RocketToken is IERC20, Ownable {
         returns (bool)
     {
         _transfer(msg.sender, recipient, amount);
+        return true;
     }
 
     function allowance(address owner, address spender)
@@ -140,7 +141,7 @@ contract RocketToken is IERC20, Ownable {
 
         if(config.destination!=address(0))
             balances[config.destination] = balances[config.destination] +fee;
-        else 
+        else
             fee = 0;
 
         balances[recipient] = balances[recipient].add(amount - fee);

@@ -28,9 +28,7 @@ contract('liquid vault', function(accounts) {
   const feeReceiver = accounts[8];
   const treasury = accounts[7];
 
-  //TODO get UniswapPair
-  const uniswapPair = accounts[3];
-
+  let uniswapPair;
   let uniswapFactory;
   let uniswapRouter;
   let weth;
@@ -52,7 +50,8 @@ contract('liquid vault', function(accounts) {
 
 
     await feeDistributor.seed(rocketToken.address, liquidVault.address);
-  
+    uniswapPair = await rocketToken.tokenUniswapPair();
+
     await liquidVault.seed(
       rocketToken.address,
       feeDistributor.address,
@@ -150,17 +149,16 @@ contract('liquid vault', function(accounts) {
       );
     });
 
-    it.only('should be possible to add liquidity on pair', async () => {
+    it('should be possible to add liquidity on pair', async () => {
       const liquidityTokensAmount = bn('10000').mul(baseUnit); // 10.000 tokens
       const liquidityEtherAmount = bn('5').mul(baseUnit); // 5 ETH
 
-      const pairAddress = await rocketToken.tokenUniswapPair();
-      const pair = await IUniswapV2Pair.at(pairAddress);
+      const pair = await IUniswapV2Pair.at(uniswapPair);
 
       const reservesBefore = await pair.getReserves();
       assertBNequal(reservesBefore[0], 0);
       assertBNequal(reservesBefore[1], 0);
-      
+
       await rocketToken.approve(uniswapRouter.address, liquidityTokensAmount);
       await uniswapRouter.addLiquidityETH(
         rocketToken.address,
@@ -182,22 +180,143 @@ contract('liquid vault', function(accounts) {
         assertBNequal(reservesAfter[1], liquidityTokensAmount);
       }
     });
+    
+    it.skip('should be possible get CurrentTokenPrice', async () => {
+      const liquidityTokensAmount = bn('10000').mul(baseUnit); // 10.000 tokens
+      const liquidityEtherAmount = bn('5').mul(baseUnit); // 5 ETH
+
+      const pair = await IUniswapV2Pair.at(uniswapPair);
+
+      const reservesBefore = await pair.getReserves();
+      assertBNequal(reservesBefore[0], 0);
+      assertBNequal(reservesBefore[1], 0);
+
+      await rocketToken.approve(uniswapRouter.address, liquidityTokensAmount);
+      await uniswapRouter.addLiquidityETH(
+        rocketToken.address,
+        liquidityTokensAmount,
+        0,
+        0,
+        OWNER,
+        new Date().getTime() + 3000,
+        {value: liquidityEtherAmount}
+      );
+
+      const res = await liquidVault.getCurrentTokenPrice();
+      console.log(res.toString());
+
+      const amount = bn('890000').mul(baseUnit);
+      await rocketToken.transfer(liquidVault.address, amount);
+
+
+      console.log((await web3.eth.getBalance(liquidVault.address)).toString());
+      await liquidVault.purchaseLP({ value: '1000' });
+
+      const ress = await liquidVault.getCurrentTokenPrice();
+      console.log(ress.toString());
+      
+      console.log((await web3.eth.getBalance(liquidVault.address)).toString());
+    });
+
+    it('should be possible to swapExactETHForTokens directly', async () => {
+      const liquidityTokensAmount = bn('10000').mul(baseUnit); // 10.000 tokens
+      const liquidityEtherAmount = bn('5').mul(baseUnit); // 5 ETH
+
+      const pair = await IUniswapV2Pair.at(uniswapPair);
+
+      const reservesBefore = await pair.getReserves();
+      assertBNequal(reservesBefore[0], 0);
+      assertBNequal(reservesBefore[1], 0);
+
+      await rocketToken.approve(uniswapRouter.address, liquidityTokensAmount);
+
+      await uniswapRouter.addLiquidityETH(
+        rocketToken.address,
+        liquidityTokensAmount,
+        0,
+        0,
+        OWNER,
+        new Date().getTime() + 3000,
+        {value: liquidityEtherAmount}
+      );
+
+      const amount = bn('890000').mul(baseUnit);
+      await rocketToken.transfer(liquidVault.address, amount);
+
+      assertBNequal(await rocketToken.balanceOf(uniswapPair), '10000000000000000000000');
+
+      await uniswapRouter.swapExactETHForTokens(0, [weth.address, rocketToken.address], liquidVault.address, 7258118400, {value: 100})
+
+      assertBNequal(await rocketToken.balanceOf(uniswapPair), '9999999999999999800601');
+    });
+
+
+    it('should be possible to purchaseLP', async () => {
+      const liquidityTokensAmount = bn('10000').mul(baseUnit); // 10.000 tokens
+      const liquidityEtherAmount = bn('5').mul(baseUnit); // 5 ETH
+
+      const pair = await IUniswapV2Pair.at(uniswapPair);
+
+      const reservesBefore = await pair.getReserves();
+      assertBNequal(reservesBefore[0], 0);
+      assertBNequal(reservesBefore[1], 0);
+
+      await rocketToken.approve(uniswapRouter.address, liquidityTokensAmount);
+
+      await uniswapRouter.addLiquidityETH(
+        rocketToken.address,
+        liquidityTokensAmount,
+        0,
+        0,
+        OWNER,
+        new Date().getTime() + 3000,
+        {value: liquidityEtherAmount}
+      );
+
+      const amount = bn('890000').mul(baseUnit);
+      await rocketToken.transfer(liquidVault.address, amount);
+
+      const balanceBefore = await rocketToken.balanceOf(liquidVault.address);
+
+      const result = await liquidVault.purchaseLP({ value: '10000' });
+
+      assert.equal(result.logs.length, 1);
+      const rocketRequired = result.logs[0].args.r3t;
+
+      const balanceAfter = await rocketToken.balanceOf(liquidVault.address);
+      assert.equal(balanceAfter.add(rocketRequired).gt(balanceBefore), true);
+    });
+
   });
 
   describe('Lock period', async () => {
+    //WIP
+    it.skip('should be possible get Locked Period', async () => {
+      const liquidityTokensAmount = bn('10000').mul(baseUnit); // 10.000 tokens
+      const liquidityEtherAmount = bn('5').mul(baseUnit); // 5 ETH
+
+      const pair = await IUniswapV2Pair.at(uniswapPair);
+
+      const reservesBefore = await pair.getReserves();
+      assertBNequal(reservesBefore[0], 0);
+      assertBNequal(reservesBefore[1], 0);
+
+      await rocketToken.approve(uniswapRouter.address, liquidityTokensAmount);
+      await uniswapRouter.addLiquidityETH(
+        rocketToken.address,
+        liquidityTokensAmount,
+        0,
+        0,
+        OWNER,
+        new Date().getTime() + 3000,
+        {value: liquidityEtherAmount}
+      );
+
+      const res = await liquidVault.getLockedPeriod();
+      console.log(res.toString());
+    });
 
   });
-
-  // function addLiquidityETH(
-  //   address token,
-  //   uint amountTokenDesired,
-  //   uint amountTokenMin,
-  //   uint amountETHMin,
-  //   address to,
-  //   uint deadline
-  // )
-
-  // getReserves
 
 
 
