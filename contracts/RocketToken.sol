@@ -41,6 +41,10 @@ contract RocketToken is IERC20, Ownable {
         createUniswapPair();
     }
 
+    function fee() external view returns (uint16) {
+        return config.fee;
+    }
+
     function decimals() external view returns (uint8) {
         return 18;
     }
