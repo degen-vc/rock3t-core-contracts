@@ -31,7 +31,7 @@ contract RocketToken is IERC20, Ownable {
     string public symbol = "R3T";
 
     constructor(uint16 fee, address destination, address _router, address _factory) {
-        _totalSupply = 11e6;
+        _totalSupply = 11e6 * 10e18;
         balances[msg.sender] = _totalSupply;
         config.fee = fee;
         config.destination = destination;
@@ -80,8 +80,19 @@ contract RocketToken is IERC20, Ownable {
         override
         returns (bool)
     {
-        allowances[msg.sender][spender] = amount;
-        emit Approval(msg.sender, spender, amount);
+        _approve(msg.sender, spender, amount);
+    }
+
+    function _approve(
+        address owner,
+        address spender,
+        uint256 amount
+    ) internal virtual {
+        require(owner != address(0), "ERC20: approve from the zero address");
+        require(spender != address(0), "ERC20: approve to the zero address");
+
+        allowances[owner][spender] = amount;
+        emit Approval(owner, spender, amount);
     }
 
     function transferFrom(
@@ -89,11 +100,15 @@ contract RocketToken is IERC20, Ownable {
         address recipient,
         uint256 amount
     ) external override returns (bool) {
-        require(
-            allowances[sender][recipient] >= amount,
-            "ERC20: not approved to send"
-        );
         _transfer(sender, recipient, amount);
+        _approve(
+            sender,
+            msg.sender,
+            allowances[sender][msg.sender].sub(
+                amount,
+                "ERC20: transfer amount exceeds allowance"
+            )
+        );
         return true;
     }
 
