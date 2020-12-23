@@ -51,7 +51,7 @@ contract('liquid vault', function(accounts) {
     liquidVault = await LiquidVault.new();
 
 
-    await feeDistributor.seed(rocketToken.address, liquidVault.address);
+    await feeDistributor.seed(rocketToken.address, liquidVault.address, OWNER, 0);
     uniswapPair = await rocketToken.tokenUniswapPair();
 
     await liquidVault.seed(
