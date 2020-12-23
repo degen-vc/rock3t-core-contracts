@@ -68,7 +68,8 @@ contract LiquidVault is Ownable {
     event LPClaimed(
         address holder,
         uint256 amount,
-        uint256 timestamp
+        uint256 timestamp,
+        uint blackholeDonation
     );
 
     constructor() {
@@ -236,8 +237,8 @@ contract LiquidVault is Ownable {
             "R3T: LP still locked."
         );
         LockedLP[msg.sender].pop();
-        emit LPClaimed(msg.sender, batch.amount, block.timestamp);
         uint blackholeDonation = (config.blackHoleShare * batch.amount).div(1000);
+        emit LPClaimed(msg.sender, batch.amount, block.timestamp, blackholeDonation);
         config.tokenPair.transfer(address(0), blackholeDonation);
         return config.tokenPair.transfer(batch.holder, batch.amount-blackholeDonation);
     }
@@ -261,7 +262,7 @@ contract LiquidVault is Ownable {
 
     function _calculateLockPeriod() internal view returns (uint256 globalLPLockTime) {
         // WIP
-        return 10;
+        return 1 days;
 
         uint R3TinVault = IERC20(config.R3T).balanceOf(address(this));
         uint ethInUniswap = config.tokenPair.balanceOf(address(this));
