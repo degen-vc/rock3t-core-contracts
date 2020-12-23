@@ -27,6 +27,8 @@ contract('liquid vault', function(accounts) {
   const lvEthFeePercent = 10 // 1%;
   const feeReceiver = accounts[8];
   const treasury = accounts[7];
+  const startTime = Math.floor(Date.now() / 1000);
+  const ONE_DAY = 86400;
 
   let uniswapPair;
   let uniswapFactory;
@@ -279,11 +281,12 @@ contract('liquid vault', function(accounts) {
       const balanceBefore = await rocketToken.balanceOf(liquidVault.address);
 
       const result = await liquidVault.purchaseLP({ value: '10000' });
-
+      
       assert.equal(result.logs.length, 1);
       const rocketRequired = result.logs[0].args.r3t;
 
       const balanceAfter = await rocketToken.balanceOf(liquidVault.address);
+      
       assert.equal(balanceAfter.add(rocketRequired).gt(balanceBefore), true);
     });
 
@@ -318,7 +321,113 @@ contract('liquid vault', function(accounts) {
 
   });
 
+  describe('Claim LP', async () => {
+    it('should not be possible to claim zero LP', async () => {
+      await expectRevert(
+        liquidVault.claimLP(),
+        'R3T: No locked LP.'
+      );
+    });
 
+    it('should not be possible to claim LP while it is still locked', async () => {
+      const liquidityTokensAmount = bn('10000').mul(baseUnit); // 10.000 tokens
+      const liquidityEtherAmount = bn('5').mul(baseUnit); // 5 ETH
+
+      const pair = await IUniswapV2Pair.at(uniswapPair);
+
+      const reservesBefore = await pair.getReserves();
+      assertBNequal(reservesBefore[0], 0);
+      assertBNequal(reservesBefore[1], 0);
+
+      await rocketToken.approve(uniswapRouter.address, liquidityTokensAmount);
+
+      await uniswapRouter.addLiquidityETH(
+        rocketToken.address,
+        liquidityTokensAmount,
+        0,
+        0,
+        OWNER,
+        new Date().getTime() + 3000,
+        {value: liquidityEtherAmount}
+      );
+
+      const amount = bn('890000').mul(baseUnit);
+      await rocketToken.transfer(liquidVault.address, amount);
+
+      const result = await liquidVault.purchaseLP({ value: '10000' });
+
+      assert.equal(result.logs.length, 1);
+      
+      await expectRevert(
+        liquidVault.claimLP(),
+        'R3T: LP still locked.'
+      );
+    });
+
+    it('should be possible to claim LP after the purchase', async () => {
+      const liquidityTokensAmount = bn('10000').mul(baseUnit); // 10.000 tokens
+      const liquidityEtherAmount = bn('5').mul(baseUnit); // 5 ETH
+
+      const pair = await IUniswapV2Pair.at(uniswapPair);
+
+      const reservesBefore = await pair.getReserves();
+      assertBNequal(reservesBefore[0], 0);
+      assertBNequal(reservesBefore[1], 0);
+
+      await rocketToken.approve(uniswapRouter.address, liquidityTokensAmount);
+
+      await uniswapRouter.addLiquidityETH(
+        rocketToken.address,
+        liquidityTokensAmount,
+        0,
+        0,
+        OWNER,
+        new Date().getTime() + 3000,
+        {value: liquidityEtherAmount}
+      );
+
+      const amount = bn('890000').mul(baseUnit);
+      await rocketToken.transfer(liquidVault.address, amount);
+
+      await ganache.setTime(startTime);
+      const result = await liquidVault.purchaseLP({ value: '10000' });
+      
+      assert.equal(result.logs.length, 1);
+
+      const lpBalanceBefore = await pair.balanceOf(OWNER);
+      const claimTime = startTime + ONE_DAY + 1;
+      
+      await ganache.setTime(claimTime);
+
+      const lockedLPLength = await liquidVault.lockedLPLength(OWNER);
+
+      assertBNequal(lockedLPLength, 1);
+
+      const lockedLP = await liquidVault.getLockedLP(OWNER, 0);
+      const claim = await liquidVault.claimLP();
+      const lpBalanceAfter = await pair.balanceOf(OWNER);
+      const lockedLPLengthAfter = await liquidVault.lockedLPLength(OWNER);
+
+      const holder = lockedLP[0];
+      const amountToClaim = lockedLP[1];
+      const expectedFee = Math.floor((amountToClaim * blackHoleFee) / 1000);
+      const expectedBalance = amountToClaim - expectedFee;
+      const actualFee = claim.logs[0].args[3];
+
+      assert.equal(holder, OWNER);
+      assertBNequal(lockedLPLengthAfter, 0);
+      assertBNequal(amountToClaim, claim.logs[0].args[1]);
+      assertBNequal(expectedFee, actualFee);
+      assertBNequal(expectedBalance, bn(lpBalanceAfter).sub(bn(lpBalanceBefore)));
+
+      expectEvent.inTransaction(claim.tx, pair, 'Transfer', {
+            from: liquidVault.address,
+            to: ZERO_ADDRESS,
+            value: expectedFee.toString()
+        });
+      
+    });
+  });
 
 
   // TODO
