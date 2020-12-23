@@ -6,15 +6,15 @@ const LiquidVault = artifacts.require('LiquidVault');
 
 const { 
     UNISWAP_FACTORY, 
-    UNISWAP_ROUTER
+    UNISWAP_ROUTER,
+    TREASURY,
+    FEE_RECEIVER
 } = process.env;
 
 module.exports = async function (deployer, network, accounts) {
     const fee = 0 // 1%;
     const blackHoleFee = 10 // 1%;
     const lvEthFeePercent = 10 // 1%;
-    const feeReceiver = accounts[8];
-    const treasury = accounts[7];
     const rocketFee = 10;
 
     if (network === 'development') {
@@ -24,7 +24,7 @@ module.exports = async function (deployer, network, accounts) {
     const feeDistributorInstance = await FeeDistributor.deployed();
     await pausePromise('fee Distributor');
 
-    await deployer.deploy(RocketToken, 10, feeReceiver, UNISWAP_ROUTER, UNISWAP_FACTORY);
+    await deployer.deploy(RocketToken, 10, FEE_RECEIVER, UNISWAP_ROUTER, UNISWAP_FACTORY);
     const rocketTokenInstance = await RocketToken.deployed();
     await pausePromise('RocketToken');
 
@@ -38,7 +38,7 @@ module.exports = async function (deployer, network, accounts) {
     await feeDistributorInstance.seed(
         rocketTokenInstance.address, 
         liquidVaultInstance.address, 
-        feeReceiver, 
+        FEE_RECEIVER, 
         fee
     );
     await pausePromise('seed liquidity vault');
@@ -49,7 +49,7 @@ module.exports = async function (deployer, network, accounts) {
       UNISWAP_ROUTER,
       uniswapPair,
       lvEthFeePercent,
-      treasury
+      TREASURY
     );
 
 }
