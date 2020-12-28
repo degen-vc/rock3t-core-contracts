@@ -24,7 +24,7 @@ module.exports = async function (deployer, network, accounts) {
     const feeDistributorInstance = await FeeDistributor.deployed();
     await pausePromise('fee Distributor');
 
-    await deployer.deploy(RocketToken, 10, FEE_RECEIVER, UNISWAP_ROUTER, UNISWAP_FACTORY);
+    await deployer.deploy(RocketToken, 10, feeDistributorInstance.address, UNISWAP_ROUTER, UNISWAP_FACTORY);
     const rocketTokenInstance = await RocketToken.deployed();
     await pausePromise('RocketToken');
 
