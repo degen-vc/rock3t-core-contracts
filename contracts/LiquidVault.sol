@@ -118,8 +118,16 @@ contract LiquidVault is Ownable {
         treasury = _treasury;
     }
 
+    function setLockedPeriod(uint256 durationMin) external onlyOwner {
+        globalLPLockTime = durationMin * 1 minutes;
+    }
+
     function getLockedPeriod() external view returns (uint256) {
         return _calculateLockPeriod();
+    }
+
+    function getLPBurnPercentage() external view returns (uint256) {
+        return config.blackHoleShare;
     }
 
     function getCurrentTokenPrice() external view returns (uint256) {
@@ -262,7 +270,8 @@ contract LiquidVault is Ownable {
 
     function _calculateLockPeriod() internal view returns (uint256 globalLPLockTime) {
         // WIP
-        return 1 days;
+        globalLPLockTime = 1 days;
+        return globalLPLockTime;
 
         uint R3TinVault = IERC20(config.R3T).balanceOf(address(this));
         uint ethInUniswap = config.tokenPair.balanceOf(address(this));

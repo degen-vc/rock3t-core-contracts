@@ -26,7 +26,7 @@ contract FeeDistributor is Ownable {
 
     function seed(address r3t, address vault, address _secondaryAddress, uint256 _secondaryAddressShare) public onlyOwner {
         R3Ttoken = IERC20(r3t);
-        liquidVault = liquidVault;
+        liquidVault = vault;
         secondaryAddress = _secondaryAddress;
         secondaryAddressShare = _secondaryAddressShare;
 
