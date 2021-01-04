@@ -9,15 +9,16 @@ import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IWETH.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 import '@uniswap/v2-periphery/contracts/libraries/UniswapV2OracleLibrary.sol';
+import './UniswapV2Library.sol';
+import 'abdk-libraries-solidity/ABDKMathQuad.sol';
 
 contract LiquidVault is Ownable {
     using SafeMath for uint256;
 
     liquidVaultConfig public config;
 
-    uint256 public globalLPLockTime;
+    uint public globalLPLockTime;
     address public treasury;
-    LockTimeConstants public CONSTANTS;
     mapping(address => LPbatch[]) public LockedLP;
 
     bool private unlocked;
@@ -37,14 +38,6 @@ contract LiquidVault is Ownable {
         address weth;
         uint8 blackHoleShare; //0-100
         uint8 ethFeePercentage;
-    }
-
-    struct LockTimeConstants {
-        int scalingWet;
-        int shiftWet;
-        int scalingDry;
-        int shiftDry;
-        uint minLockTime;
     }
 
     struct PurchaseLPVariables {
@@ -69,15 +62,11 @@ contract LiquidVault is Ownable {
         address holder,
         uint256 amount,
         uint256 timestamp,
-        uint blackholeDonation
+        uint blackholeDonation,
+        uint lockPeriod
     );
 
     constructor() {
-        CONSTANTS.scalingWet = 11344;
-        CONSTANTS.shiftWet = -3;
-        CONSTANTS.scalingDry = -191;
-        CONSTANTS.shiftDry = -217;
-        CONSTANTS.minLockTime = 1;
         unlocked = true;
     }
 
@@ -88,11 +77,8 @@ contract LiquidVault is Ownable {
         unlocked = true;
     }
 
-    //L = (scalingWet/(mwet + shiftWet)) + (scalingDy/(mdry +shiftDry)) + C
-    //mwet = eth value of tokens in liquidvault
-    //mdry = eth in uniswap pool
     modifier updateLockTime {
-        _calculateLockPeriod();
+        globalLPLockTime = _calculateLockPeriod();
         _;
     }
 
@@ -116,10 +102,6 @@ contract LiquidVault is Ownable {
         config.blackHoleShare = blackHoleShare;
         config.ethFeePercentage = ethFeePercentage;
         treasury = _treasury;
-    }
-
-    function setLockedPeriod(uint256 durationMin) external onlyOwner {
-        globalLPLockTime = durationMin * 1 minutes;
     }
 
     function getLockedPeriod() external view returns (uint256) {
@@ -148,20 +130,6 @@ contract LiquidVault is Ownable {
     function flushToTreasury(uint amount) public onlyOwner {
         require(treasury != address(0),"R3T: treasury not set");
         IERC20(config.R3T).transfer(treasury,amount);
-    }
-
-    function setLockTimeConstants(
-        int scalingWet,
-        int shiftWet,
-        int scalingDry,
-        int shiftDry,
-        uint minLockTime
-    ) public onlyOwner {
-        CONSTANTS.scalingWet = scalingWet;
-        CONSTANTS.shiftWet = shiftWet;
-        CONSTANTS.scalingDry = scalingDry;
-        CONSTANTS.shiftDry = shiftDry;
-        CONSTANTS.minLockTime = minLockTime;
     }
 
     function purchaseLPFor(address beneficiary) public payable lock updateLockTime {
@@ -246,7 +214,7 @@ contract LiquidVault is Ownable {
         );
         LockedLP[msg.sender].pop();
         uint blackholeDonation = (config.blackHoleShare * batch.amount).div(1000);
-        emit LPClaimed(msg.sender, batch.amount, block.timestamp, blackholeDonation);
+        emit LPClaimed(msg.sender, batch.amount, block.timestamp, blackholeDonation, globalLPLockTime);
         config.tokenPair.transfer(address(0), blackholeDonation);
         return config.tokenPair.transfer(batch.holder, batch.amount-blackholeDonation);
     }
@@ -268,30 +236,32 @@ contract LiquidVault is Ownable {
         return (batch.holder, batch.amount, batch.timestamp);
     }
 
-    function _calculateLockPeriod() internal view returns (uint256 globalLPLockTime) {
-        // WIP
-        globalLPLockTime = 1 days;
-        return globalLPLockTime;
-
-        uint R3TinVault = IERC20(config.R3T).balanceOf(address(this));
-        uint ethInUniswap = config.tokenPair.balanceOf(address(this));
-        (address token0, ) = config.R3T < config.weth
-            ? (config.R3T, config.weth)
-            : (config.weth, config.R3T);
-
-        uint ethValueOfTokens = 0;
-        (uint256 reserve0, uint256 reserve1, ) = config.tokenPair.getReserves();
-
-        if (token0 == config.R3T) {
-            ethValueOfTokens = config.uniswapRouter.quote(
-                R3TinVault,
-                reserve0,
-                reserve1
-            );
-        } else {
-            ethValueOfTokens = config.uniswapRouter.quote(R3TinVault, reserve1, reserve0);
-        }
-        (int mwet, int mdry) = (int(ethValueOfTokens), int(ethInUniswap));
-        globalLPLockTime = uint((CONSTANTS.scalingWet / (mwet + CONSTANTS.shiftWet)) + (CONSTANTS.scalingDry / (mdry +CONSTANTS.shiftDry)) + int(CONSTANTS.minLockTime));
+    function _calculateLockPeriod() internal view returns (uint) {
+        address factory = address(config.tokenPair.factory());
+        (uint etherAmount, uint tokenAmount) = UniswapV2Library.getReserves(factory, config.weth, config.R3T);
+        
+        require(etherAmount != 0 && tokenAmount != 0, "Reserves cannot be zero.");
+        
+        bytes16 floatEtherAmount = ABDKMathQuad.fromUInt(etherAmount);
+        bytes16 floatTokenAmount = ABDKMathQuad.fromUInt(tokenAmount);
+        bytes16 systemHealth = ABDKMathQuad.div(
+            ABDKMathQuad.mul(
+                floatEtherAmount,
+                floatEtherAmount),
+            floatTokenAmount);
+        return ABDKMathQuad.toUInt(
+            ABDKMathQuad.add(
+                ABDKMathQuad.mul(
+                    0x4015d556000000000000000000000000, // Lmax - Lmin
+                    ABDKMathQuad.exp(
+                        ABDKMathQuad.div(
+                            systemHealth,
+                            0xc03c4a074c14c4eb3800000000000000 // -beta
+                        )
+                    )
+                ),
+                0x400f5180000000000000000000000000 // Lmin
+            )
+        );
     }
 }

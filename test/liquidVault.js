@@ -28,7 +28,6 @@ contract('liquid vault', function(accounts) {
   const feeReceiver = accounts[8];
   const treasury = accounts[7];
   const startTime = Math.floor(Date.now() / 1000);
-  const ONE_DAY = 86400;
 
   let uniswapPair;
   let uniswapFactory;
@@ -82,39 +81,6 @@ contract('liquid vault', function(accounts) {
       assertBNequal(config.ethFeePercentage, lvEthFeePercent);
     });
 
-    it('should set initial formula constants after deploy', async () => {
-      const constants = await liquidVault.CONSTANTS();
-
-      assertBNequal(constants.scalingWet, '11344');
-      assertBNequal(constants.shiftWet, '-3');
-      assertBNequal(constants.scalingDry, '-191');
-      assertBNequal(constants.shiftDry, '-217');
-      assertBNequal(constants.minLockTime, '1');
-    });
-
-    it('should be possible to update formula constants for owner', async () => {
-
-      await liquidVault.setLockTimeConstants(1, 2, 3, 4, 5);
-
-      const constants = await liquidVault.CONSTANTS();
-
-      assertBNequal(constants.scalingWet, 1);
-      assertBNequal(constants.shiftWet, 2);
-      assertBNequal(constants.scalingDry, 3);
-      assertBNequal(constants.shiftDry, 4);
-      assertBNequal(constants.minLockTime, 5);
-    });
-
-    it('should NOT be possible to update formula constants for NOT owner', async () => {
-      await expectRevert(
-        liquidVault.setLockTimeConstants(1, 2, 3, 4, 5, {from: NOT_OWNER}),
-        'Ownable: caller is not the owner',
-      );
-
-      const constants = await liquidVault.CONSTANTS();
-      assertBNequal(constants.scalingWet, '11344');
-    });
-
     it('should be possible to flush to treasury from owner', async () => {
       const amount = 10000;
       await rocketToken.transfer(liquidVault.address, amount);
@@ -142,13 +108,6 @@ contract('liquid vault', function(accounts) {
 
       assertBNequal(await rocketToken.balanceOf(liquidVault.address), amount);
       assertBNequal(await rocketToken.balanceOf(treasury), 0);
-    });
-
-    it('it should NOT be possible to add pair 2nd time', async () => {
-      await expectRevert(
-        rocketToken.createUniswapPair(),
-        'Token: pool already created',
-      );
     });
 
     it('should be possible to add liquidity on pair', async () => {
@@ -292,9 +251,8 @@ contract('liquid vault', function(accounts) {
 
   });
 
-  describe('Lock period', async () => {
-    //WIP
-    it.skip('should be possible get Locked Period', async () => {
+  describe('Claim LP', async () => {
+    it('should not be possible to claim zero LP', async () => {
       const liquidityTokensAmount = bn('10000').mul(baseUnit); // 10.000 tokens
       const liquidityEtherAmount = bn('5').mul(baseUnit); // 5 ETH
 
@@ -305,6 +263,7 @@ contract('liquid vault', function(accounts) {
       assertBNequal(reservesBefore[1], 0);
 
       await rocketToken.approve(uniswapRouter.address, liquidityTokensAmount);
+
       await uniswapRouter.addLiquidityETH(
         rocketToken.address,
         liquidityTokensAmount,
@@ -314,15 +273,7 @@ contract('liquid vault', function(accounts) {
         new Date().getTime() + 3000,
         {value: liquidityEtherAmount}
       );
-
-      const res = await liquidVault.getLockedPeriod();
-      console.log(res.toString());
-    });
-
-  });
-
-  describe('Claim LP', async () => {
-    it('should not be possible to claim zero LP', async () => {
+      
       await expectRevert(
         liquidVault.claimLP(),
         'R3T: No locked LP.'
@@ -365,8 +316,8 @@ contract('liquid vault', function(accounts) {
     });
 
     it('should be possible to claim LP after the purchase', async () => {
-      const liquidityTokensAmount = bn('10000').mul(baseUnit); // 10.000 tokens
-      const liquidityEtherAmount = bn('5').mul(baseUnit); // 5 ETH
+      const liquidityTokensAmount = bn('1000').mul(baseUnit); // 10.000 tokens
+      const liquidityEtherAmount = bn('10').mul(baseUnit); // 5 ETH
 
       const pair = await IUniswapV2Pair.at(uniswapPair);
 
@@ -389,22 +340,25 @@ contract('liquid vault', function(accounts) {
       const amount = bn('890000').mul(baseUnit);
       await rocketToken.transfer(liquidVault.address, amount);
 
+      const lockTime = await liquidVault.getLockedPeriod.call();
+      
       await ganache.setTime(startTime);
       const result = await liquidVault.purchaseLP({ value: '10000' });
+
+      const lockTime1 = await liquidVault.getLockedPeriod.call();
       
       assert.equal(result.logs.length, 1);
 
       const lpBalanceBefore = await pair.balanceOf(OWNER);
-      const claimTime = startTime + ONE_DAY + 1;
-      
+      const claimTime = bn(startTime).add(bn(lockTime)).add(bn(1)).toString();
       await ganache.setTime(claimTime);
 
       const lockedLPLength = await liquidVault.lockedLPLength(OWNER);
-
       assertBNequal(lockedLPLength, 1);
 
       const lockedLP = await liquidVault.getLockedLP(OWNER, 0);
       const claim = await liquidVault.claimLP();
+      
       const lpBalanceAfter = await pair.balanceOf(OWNER);
       const lockedLPLengthAfter = await liquidVault.lockedLPLength(OWNER);
 

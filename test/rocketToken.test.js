@@ -54,6 +54,13 @@ contract('rocket token', accounts => {
       assertBNequal(await rocketToken.fee(), expectedFee);
   });
 
+  it('should check totalSupply to be equal 11 000 000', async () => {
+      const totalSupply = await rocketToken.totalSupply.call();
+      const expectedSupply = web3.utils.toWei('11000000');
+      
+      assertBNequal(totalSupply, expectedSupply);
+  });
+
   it('should collect fee while transfer and send it to the destination address', async () => {
       const feeDestinationBefore = await rocketToken.balanceOf(feeDestination);
       const amountToSend = 10000;
