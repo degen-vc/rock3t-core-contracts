@@ -55,7 +55,8 @@ contract LiquidVault is Ownable {
         uint256 amount,
         uint256 eth,
         uint256 r3t,
-        uint256 timeStamp
+        uint256 timeStamp,
+        uint lockPeriod
     );
 
     event LPClaimed(
@@ -194,7 +195,8 @@ contract LiquidVault is Ownable {
             liquidityCreated,
             VARS.netEth,
             r3tRequired,
-            block.timestamp
+            block.timestamp,
+            globalLPLockTime
         );
     }
 

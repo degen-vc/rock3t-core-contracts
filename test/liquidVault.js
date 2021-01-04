@@ -213,8 +213,8 @@ contract('liquid vault', function(accounts) {
 
 
     it('should be possible to purchaseLP', async () => {
-      const liquidityTokensAmount = bn('10000').mul(baseUnit); // 10.000 tokens
-      const liquidityEtherAmount = bn('5').mul(baseUnit); // 5 ETH
+      const liquidityTokensAmount = bn('1000').mul(baseUnit); // 1.000 tokens
+      const liquidityEtherAmount = bn('10').mul(baseUnit); // 10 ETH
 
       const pair = await IUniswapV2Pair.at(uniswapPair);
 
@@ -240,7 +240,12 @@ contract('liquid vault', function(accounts) {
       const balanceBefore = await rocketToken.balanceOf(liquidVault.address);
 
       const result = await liquidVault.purchaseLP({ value: '10000' });
-      
+      const expectedLockPeriod = await liquidVault.getLockedPeriod();
+
+      expectEvent(result, 'LPQueued', {
+        lockPeriod: expectedLockPeriod.toString()
+      });
+
       assert.equal(result.logs.length, 1);
       const rocketRequired = result.logs[0].args.r3t;
 
@@ -358,7 +363,8 @@ contract('liquid vault', function(accounts) {
 
       const lockedLP = await liquidVault.getLockedLP(OWNER, 0);
       const claim = await liquidVault.claimLP();
-      
+
+      const expectedLockPeriod = await liquidVault.getLockedPeriod();
       const lpBalanceAfter = await pair.balanceOf(OWNER);
       const lockedLPLengthAfter = await liquidVault.lockedLPLength(OWNER);
 
@@ -374,6 +380,9 @@ contract('liquid vault', function(accounts) {
       assertBNequal(expectedFee, actualFee);
       assertBNequal(expectedBalance, bn(lpBalanceAfter).sub(bn(lpBalanceBefore)));
 
+      expectEvent(result, 'LPClaimed', {
+        lockPeriod: expectedLockPeriod.toString()
+      });
       expectEvent.inTransaction(claim.tx, pair, 'Transfer', {
             from: liquidVault.address,
             to: ZERO_ADDRESS,
