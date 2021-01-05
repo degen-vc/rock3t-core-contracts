@@ -21,9 +21,9 @@ contract('liquid vault', function(accounts) {
   const nftFund = accounts[9];
   const baseUnit = bn('1000000000000000000');
 
-  const ethFee = 0 // 1%;
-  const blackHoleFee = 10 // 1%;
-  const lvEthFeePercent = 10 // 1%;
+  const ethFee = 0;
+  const blackHoleFee = 10;
+  const lvEthFeePercent = 10;
   const feeReceiver = accounts[8];
   const treasury = accounts[7];
   const startTime = Math.floor(Date.now() / 1000);
@@ -97,9 +97,35 @@ contract('liquid vault', function(accounts) {
       );
 
       const res = await liquidVault.getLockedPeriod();
-      console.log('res', res.toString());
 
       assertBNequal(res, '7521622');
+    });
+
+    it('should return 3402745 seconds (39.3 days) with 500 ETH and 100k R3T in reserves', async () => {
+      const liquidityTokensAmount = bn('100000').mul(baseUnit); // 100.000 tokens
+      const liquidityEtherAmount = bn('500').mul(baseUnit); // 500 ETH
+
+      const pair = await IUniswapV2Pair.at(uniswapPair);
+
+      const reservesBefore = await pair.getReserves();
+      assertBNequal(reservesBefore[0], 0);
+      assertBNequal(reservesBefore[1], 0);
+
+      await rocketToken.approve(uniswapRouter.address, liquidityTokensAmount);
+      await uniswapRouter.addLiquidityETH(
+        rocketToken.address,
+        liquidityTokensAmount,
+        0,
+        0,
+        OWNER,
+        new Date().getTime() + 3000,
+        {value: liquidityEtherAmount}
+      );
+
+      const res = await liquidVault.getLockedPeriod();
+
+
+      assertBNequal(res, '3402745');
     });
 
     it('should return 7275660 seconds (84 days) with 100 ETH and 50k R3T', async () => {
@@ -124,7 +150,6 @@ contract('liquid vault', function(accounts) {
       );
 
       const res = await liquidVault.getLockedPeriod();
-      console.log('res', res.toString());
 
       assertBNequal(res, '7275660');
     });
@@ -151,7 +176,6 @@ contract('liquid vault', function(accounts) {
       );
 
       const res = await liquidVault.getLockedPeriod();
-      console.log('res', res.toString());
 
       assertBNequal(res, '86400');
     });
@@ -178,7 +202,6 @@ contract('liquid vault', function(accounts) {
       );
 
       const res = await liquidVault.getLockedPeriod();
-      console.log('res', res.toString());
 
       assertBNequal(res, '7776000');
     });
@@ -205,7 +228,6 @@ contract('liquid vault', function(accounts) {
       );
 
       const res = await liquidVault.getLockedPeriod();
-      console.log('res', res.toString());
 
       assertBNequal(res, '7775999');
     });
@@ -232,7 +254,6 @@ contract('liquid vault', function(accounts) {
       );
 
       const res = await liquidVault.getLockedPeriod();
-      console.log('res', res.toString());
 
       assertBNequal(res, '86400');
     });
@@ -259,7 +280,6 @@ contract('liquid vault', function(accounts) {
       );
 
       const res = await liquidVault.getLockedPeriod();
-      console.log('res', res.toString());
 
       assertBNequal(res, '7776000');
     });
