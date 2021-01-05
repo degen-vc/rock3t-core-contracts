@@ -31,7 +31,7 @@ contract RocketToken is IERC20, Ownable {
     string public symbol = "R3T";
 
     constructor(uint16 fee, address destination, address _router, address _factory) {
-        _totalSupply = 11e6 * 10e18;
+        _totalSupply = 11e6 * 1e18;
         balances[msg.sender] = _totalSupply;
         config.fee = fee;
         config.destination = destination;
