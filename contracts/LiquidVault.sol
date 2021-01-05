@@ -16,6 +16,7 @@ contract LiquidVault is Ownable {
     using SafeMath for uint256;
 
     liquidVaultConfig public config;
+    BuyPressureVariables public calibration;
 
     uint public globalLPLockTime;
     address public treasury;
@@ -37,7 +38,6 @@ contract LiquidVault is Ownable {
         address self;
         address weth;
         uint8 blackHoleShare; //0-100
-        uint8 ethFeePercentage;
     }
 
     struct PurchaseLPVariables {
@@ -45,6 +45,13 @@ contract LiquidVault is Ownable {
         uint netEth;
         uint reserve1;
         uint reserve2;
+    }
+
+    struct BuyPressureVariables {
+        bytes16 a;
+        bytes16 b;
+        bytes16 c;
+        bytes16 d;
     }
 
     /*
@@ -68,6 +75,12 @@ contract LiquidVault is Ownable {
     );
 
     constructor() {
+        calibrate(
+            0xbfcb59e05f1e2674d208f2461d9cb64e, // a = -3e-16
+            0x3fde33dcfe54a3802b3e313af8e0e525, // b = 1.4e-10
+            0x3ff164840e1719f7f8ca8198f1d3ed52, // c = 8.5e-5
+            0x00000000000000000000000000000000 // d = 0
+        );
         unlocked = true;
     }
 
@@ -89,11 +102,8 @@ contract LiquidVault is Ownable {
         uint8 blackHoleShare,
         address uniswapRouter,
         address uniswapPair,
-        uint8 ethFeePercentage,
         address _treasury
     ) public onlyOwner {
-        require(ethFeePercentage <= 40, "R3T: eth fee cannot exceed 40%");
-
         config.R3T = r3t;
         config.feeDistributor = FeeDistributorLike(feeDistributor);
         config.tokenPair = IUniswapV2Pair(uniswapPair);
@@ -101,7 +111,6 @@ contract LiquidVault is Ownable {
         config.weth = config.uniswapRouter.WETH();
         config.self = address(this);
         config.blackHoleShare = blackHoleShare;
-        config.ethFeePercentage = ethFeePercentage;
         treasury = _treasury;
     }
 
@@ -137,7 +146,8 @@ contract LiquidVault is Ownable {
         config.feeDistributor.distributeFees();
         require(msg.value > 0, "R3T: eth required to mint R3T LP");
         PurchaseLPVariables memory VARS;
-        VARS.ethFee = msg.value.mul(config.ethFeePercentage).div(1000);
+        uint ethFeePercentage = feeUINT();
+        VARS.ethFee = msg.value.mul(ethFeePercentage).div(100);
         VARS.netEth = msg.value.sub(VARS.ethFee);
 
         (address token0, ) = config.R3T < config.weth
@@ -168,7 +178,7 @@ contract LiquidVault is Ownable {
 
         uint256 liquidityCreated = config.tokenPair.mint(config.self);
 
-        {
+        if (VARS.ethFee > 0) {
             address[] memory path = new address[](2);
             path[0] = config.weth;
             path[1] = config.R3T;
@@ -180,7 +190,6 @@ contract LiquidVault is Ownable {
                 7258118400
             );
         }
-
 
         LockedLP[beneficiary].push(
             LPbatch({
@@ -258,12 +267,43 @@ contract LiquidVault is Ownable {
                     ABDKMathQuad.exp(
                         ABDKMathQuad.div(
                             systemHealth,
-                            0xc03c4a074c14c4eb3800000000000000 // -beta
+                            0xc03c4a074c14c4eb3800000000000000 // -beta = -2.97263250118e18
                         )
                     )
                 ),
                 0x400f5180000000000000000000000000 // Lmin
             )
         );
+    }
+
+    function calibrate(bytes16 a, bytes16 b, bytes16 c, bytes16 d) public onlyOwner {
+        calibration.a = a;
+        calibration.b = b;
+        calibration.c = c;
+        calibration.d = d;
+    }
+
+    function square(bytes16 number) internal pure returns (bytes16) {
+        return ABDKMathQuad.mul(number, number);
+    }
+
+    function cube(bytes16 number) internal pure returns (bytes16) {
+        return ABDKMathQuad.mul(square(number), number);
+    }
+
+    function fee() public returns (bytes16){
+        bytes16 tokensInUniswap = ABDKMathQuad.fromUInt(IERC20(config.R3T).balanceOf(address(config.tokenPair)) / 1e18);
+
+        bytes16 t_squared = square(tokensInUniswap);
+        bytes16 t_cubed = cube(tokensInUniswap);
+
+        bytes16 term1 = ABDKMathQuad.mul(calibration.a, t_cubed);
+        bytes16 term2 = ABDKMathQuad.mul(calibration.b, t_squared);
+        bytes16 term3 = ABDKMathQuad.mul(calibration.c, tokensInUniswap);
+        return ABDKMathQuad.add(term1, ABDKMathQuad.add(term2, ABDKMathQuad.add(term3, calibration.d)));
+    }
+
+    function feeUINT() public returns (uint){
+        return ABDKMathQuad.toUInt(fee());
     }
 }
