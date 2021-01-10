@@ -23,7 +23,6 @@ contract('liquid vault', function(accounts) {
 
   const ethFee = 0;
   const blackHoleFee = 10;
-  const lvEthFeePercent = 10;
   const feeReceiver = accounts[8];
   const treasury = accounts[7];
   const startTime = Math.floor(Date.now() / 1000);
@@ -59,7 +58,6 @@ contract('liquid vault', function(accounts) {
       blackHoleFee,
       uniswapRouter.address,
       uniswapPair,
-      lvEthFeePercent,
       treasury
     );
 

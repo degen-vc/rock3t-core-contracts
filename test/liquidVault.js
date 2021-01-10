@@ -9,7 +9,7 @@ const LiquidVault = artifacts.require('LiquidVault');
 const IUniswapV2Pair = artifacts.require('IUniswapV2Pair');
 
 
-contract('liquid vault', function(accounts) {
+contract.only('liquid vault', function(accounts) {
   const ganache = new Ganache(web3);
   afterEach('revert', ganache.revert);
 
@@ -24,7 +24,6 @@ contract('liquid vault', function(accounts) {
 
   const ethFee = 0 // 1%;
   const blackHoleFee = 10 // 1%;
-  const lvEthFeePercent = 10 // 1%;
   const feeReceiver = accounts[8];
   const treasury = accounts[7];
   const startTime = Math.floor(Date.now() / 1000);
@@ -59,7 +58,6 @@ contract('liquid vault', function(accounts) {
       blackHoleFee,
       uniswapRouter.address,
       uniswapPair,
-      lvEthFeePercent,
       treasury
     );
 
@@ -78,7 +76,6 @@ contract('liquid vault', function(accounts) {
       assert.equal(config.self, liquidVault.address);
       assert.equal(config.blackHoleShare, blackHoleFee);
       assert.equal(treasury, treasury);
-      assertBNequal(config.ethFeePercentage, lvEthFeePercent);
     });
 
     it('should be possible to flush to treasury from owner', async () => {
@@ -250,8 +247,8 @@ contract('liquid vault', function(accounts) {
       const rocketRequired = result.logs[0].args.r3t;
 
       const balanceAfter = await rocketToken.balanceOf(liquidVault.address);
-      
-      assert.equal(balanceAfter.add(rocketRequired).gt(balanceBefore), true);
+      // eth fee is 0, so liquidVault did not receive tokens from fee swap
+      assert.equal(balanceAfter.add(rocketRequired).eq(balanceBefore), true);
     });
 
   });
@@ -380,15 +377,6 @@ contract('liquid vault', function(accounts) {
       assertBNequal(expectedFee, actualFee);
       assertBNequal(expectedBalance, bn(lpBalanceAfter).sub(bn(lpBalanceBefore)));
 
-      expectEvent(result, 'LPClaimed', {
-        lockPeriod: expectedLockPeriod.toString()
-      });
-      expectEvent.inTransaction(claim.tx, pair, 'Transfer', {
-            from: liquidVault.address,
-            to: ZERO_ADDRESS,
-            value: expectedFee.toString()
-        });
-      
     });
   });
 

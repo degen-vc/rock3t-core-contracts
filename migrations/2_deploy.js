@@ -14,7 +14,6 @@ const {
 module.exports = async function (deployer, network, accounts) {
     const fee = 0 // 1%;
     const blackHoleFee = 10 // 1%;
-    const lvEthFeePercent = 10 // 1%;
     const rocketFee = 10;
 
     if (network === 'development') {
@@ -48,7 +47,6 @@ module.exports = async function (deployer, network, accounts) {
       blackHoleFee,
       UNISWAP_ROUTER,
       uniswapPair,
-      lvEthFeePercent,
       TREASURY
     );
 
