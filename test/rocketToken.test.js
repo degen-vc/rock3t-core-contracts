@@ -4,7 +4,7 @@ const { expectEvent, expectRevert, constants } = require("@openzeppelin/test-hel
 
 const FeeDistributor = artifacts.require('FeeDistributor');
 const RocketToken = artifacts.require('RocketToken');
-const FeeApprover = artifacts.require("FeeApprover");
+const FeeApprover = artifacts.require('FeeApprover');
 
 contract('rocket token', accounts => {
   const ganache = new Ganache(web3);
@@ -69,19 +69,12 @@ contract('rocket token', accounts => {
       const feeDestinationBefore = await rocketToken.balanceOf(feeDestination);
       const amountToSend = 10000;
       const fee = await feeApprover.feePercentX100.call();
-      console.log('fee', fee.toString());
-      
 
-      const tr = await rocketToken.transfer(notOwner, amountToSend);
-      console.log('transfer', JSON.stringify(tr));
+      await rocketToken.transfer(notOwner, amountToSend);
       
-
       const feeDestinationAfter = await rocketToken.balanceOf(feeDestination);
-      console.log('fee destination balance', feeDestinationAfter.toString());
-      
       const expectdFeeAmount = (fee * amountToSend) / 100;
       const recepientBalance = await rocketToken.balanceOf(notOwner);
-      console.log('recipient balance', feeDestinationAfter.toString());
       const expectedBalance = amountToSend - expectdFeeAmount;
       
       assertBNequal(feeDestinationBefore, 0);
