@@ -6,6 +6,7 @@ const FeeDistributor = artifacts.require('FeeDistributor');
 const RocketToken = artifacts.require('RocketToken');
 const LiquidVault = artifacts.require('LiquidVault');
 const IUniswapV2Pair = artifacts.require('IUniswapV2Pair');
+const FeeApprover = artifacts.require('FeeApprover');
 
 
 contract('liquid vault', function(accounts) {
@@ -34,6 +35,7 @@ contract('liquid vault', function(accounts) {
   let weth;
 
   let feeDistributor;
+  let feeApprover;
   let rocketToken;
   let liquidVault;
 
@@ -44,10 +46,14 @@ contract('liquid vault', function(accounts) {
     weth = contracts.weth;
 
     // deploy and setup main contracts
+    feeApprover = await FeeApprover.new();
     feeDistributor = await FeeDistributor.new();
-    rocketToken = await RocketToken.new(ethFee, feeReceiver, uniswapRouter.address, uniswapFactory.address);
+    rocketToken = await RocketToken.new(feeDistributor.address, feeApprover.address, uniswapRouter.address, uniswapFactory.address);
     liquidVault = await LiquidVault.new();
 
+    await feeApprover.initialize(rocketToken.address, uniswapFactory.address, uniswapRouter.address, liquidVault.address);
+    await feeApprover.unPause();
+    await feeApprover.setFeeMultiplier(0);
 
     await feeDistributor.seed(rocketToken.address, liquidVault.address, OWNER, 0);
     uniswapPair = await rocketToken.tokenUniswapPair();
@@ -58,7 +64,8 @@ contract('liquid vault', function(accounts) {
       blackHoleFee,
       uniswapRouter.address,
       uniswapPair,
-      treasury
+      treasury,
+      NOT_OWNER
     );
 
     await ganache.snapshot();

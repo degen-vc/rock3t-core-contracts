@@ -5,6 +5,7 @@ const { expectEvent, expectRevert, constants } = require("@openzeppelin/test-hel
 const RocketToken = artifacts.require('RocketToken');
 const IUniswapV2Pair = artifacts.require('IUniswapV2Pair');
 const SlidingWindowOracle = artifacts.require('SlidingWindowOracle');
+const FeeApprover = artifacts.require('FeeApprover');
 
 contract('uniswap oracle', function(accounts) {
   const ganache = new Ganache(web3);
@@ -14,6 +15,7 @@ contract('uniswap oracle', function(accounts) {
   const assertBNequal = (bnOne, bnTwo) => assert.equal(bnOne.toString(), bnTwo.toString());
 
   const OWNER = accounts[0];
+  const liquidVault = accounts[1];
   const baseUnit = bn('1000000000000000000');
   const startTime = Math.floor(Date.now() / 1000);
 
@@ -30,6 +32,7 @@ contract('uniswap oracle', function(accounts) {
   let weth;
 
   let rocketToken;
+  let feeApprover;
 
   before('setup others', async function() {
     const contracts = await deployUniswap(accounts);
@@ -38,10 +41,15 @@ contract('uniswap oracle', function(accounts) {
     weth = contracts.weth;
 
     // deploy and setup main contracts
-    rocketToken = await RocketToken.new(ethFee, feeReceiver, uniswapRouter.address, uniswapFactory.address);
+    feeApprover = await FeeApprover.new();
+    rocketToken = await RocketToken.new(feeReceiver, feeApprover.address, uniswapRouter.address, uniswapFactory.address);
     uniswapPair = await rocketToken.tokenUniswapPair();
     uniswapOracle = await SlidingWindowOracle.new(uniswapFactory.address, defaultWindowSize, defaultGranularity);
     
+    await feeApprover.initialize(rocketToken.address, uniswapFactory.address, uniswapRouter.address, liquidVault);
+    await feeApprover.unPause();
+    await feeApprover.setFeeMultiplier(0);
+
     const liquidityTokensAmount = bn('10').mul(baseUnit);
     const liquidityEtherAmount = bn('5').mul(baseUnit);
 
