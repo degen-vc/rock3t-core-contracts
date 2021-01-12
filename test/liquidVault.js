@@ -9,7 +9,7 @@ const LiquidVault = artifacts.require('LiquidVault');
 const IUniswapV2Pair = artifacts.require('IUniswapV2Pair');
 
 
-contract.only('liquid vault', function(accounts) {
+contract('liquid vault', function(accounts) {
   const ganache = new Ganache(web3);
   afterEach('revert', ganache.revert);
 
@@ -379,24 +379,4 @@ contract.only('liquid vault', function(accounts) {
 
     });
   });
-
-
-  // TODO
-  // 0 uint ethInUniswap = address(config.tokenPair).balance; - in updatelocktime, weth.balanceOf should be
-  // 1. Move updateLockTime to getter fo frontend
-  // 2. Add initialSetup to rocket token with adding pair on uniswap
-  // 3. Add liquidity to the rocket pair
-
-  // it('should fail on purchaseLP with no eth', async () => {
-  //   await expectRevert(
-  //     liquidVault.purchaseLP({ value: '0' }),
-  //     'R3T: eth required to mint R3T LP',
-  //   );
-  // });
-
-
-  // it should calculate properly GlobalLPLockTime for aprox initial values like ethInUniswap = 5 and ethValueTokensOnLV = ?? 890000 / ethprice per token
-  // other cases with ethInUniswap / ethValueTokensOnLV
-  // add cases whe users starts to buy via purchaseLP and ethInUniswap in increase and ethValueTokensOnLV amount goes down, nut ethprice per token goes up
-
 });

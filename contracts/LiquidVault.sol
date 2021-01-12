@@ -52,6 +52,7 @@ contract LiquidVault is Ownable {
         bytes16 b;
         bytes16 c;
         bytes16 d;
+        uint maxReserves;
     }
 
     /*
@@ -79,7 +80,8 @@ contract LiquidVault is Ownable {
             0xbfcb59e05f1e2674d208f2461d9cb64e, // a = -3e-16
             0x3fde33dcfe54a3802b3e313af8e0e525, // b = 1.4e-10
             0x3ff164840e1719f7f8ca8198f1d3ed52, // c = 8.5e-5
-            0x00000000000000000000000000000000 // d = 0
+            0x00000000000000000000000000000000, // d = 0
+            500000 // maxReserves
         );
         unlocked = true;
     }
@@ -276,11 +278,12 @@ contract LiquidVault is Ownable {
         );
     }
 
-    function calibrate(bytes16 a, bytes16 b, bytes16 c, bytes16 d) public onlyOwner {
+    function calibrate(bytes16 a, bytes16 b, bytes16 c, bytes16 d, uint maxReserves) public onlyOwner {
         calibration.a = a;
         calibration.b = b;
         calibration.c = c;
         calibration.d = d;
+        calibration.maxReserves = maxReserves;
     }
 
     function square(bytes16 number) internal pure returns (bytes16) {
@@ -291,8 +294,13 @@ contract LiquidVault is Ownable {
         return ABDKMathQuad.mul(square(number), number);
     }
 
-    function fee() public returns (bytes16){
-        bytes16 tokensInUniswap = ABDKMathQuad.fromUInt(IERC20(config.R3T).balanceOf(address(config.tokenPair)) / 1e18);
+    function fee() public view returns (bytes16) {
+        uint tokensInUniswapUint = IERC20(config.R3T).balanceOf(address(config.tokenPair)) / 1e18;
+
+        if (tokensInUniswapUint >= calibration.maxReserves) {
+            return 0x40044000000000000000000000000000; // 40%
+        }
+        bytes16 tokensInUniswap = ABDKMathQuad.fromUInt(tokensInUniswapUint);
 
         bytes16 t_squared = square(tokensInUniswap);
         bytes16 t_cubed = cube(tokensInUniswap);
@@ -303,7 +311,7 @@ contract LiquidVault is Ownable {
         return ABDKMathQuad.add(term1, ABDKMathQuad.add(term2, ABDKMathQuad.add(term3, calibration.d)));
     }
 
-    function feeUINT() public returns (uint){
+    function feeUINT() public view returns (uint) {
         return ABDKMathQuad.toUInt(fee());
     }
 }
