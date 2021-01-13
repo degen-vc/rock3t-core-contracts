@@ -54,7 +54,7 @@ contract('rocket token', accounts => {
 
   it('should set the fee to 5 pecentage by an owner', async () => {
       const expectedFee = 50; //50%
-      await feeApprover.setFeeMultiplier(expectedFee, { from: owner });
+      await feeApprover.setFeeMultiplier(expectedFee);
       assertBNequal(await feeApprover.feePercentX100.call(), expectedFee);
   });
 

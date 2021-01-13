@@ -141,10 +141,6 @@ contract LiquidVault is Ownable {
         return config.blackHoleShare;
     }
 
-    function getCurrentTokenPrice(uint256 _amount) external view returns (uint256) {
-        return config.uniswapOracle.consult(config.R3T, _amount, config.weth);
-    }
-
     function flushToTreasury(uint amount) public onlyOwner {
         require(treasury != address(0),"R3T: treasury not set");
         IERC20(config.R3T).transfer(treasury,amount);
@@ -233,7 +229,7 @@ contract LiquidVault is Ownable {
         );
         LockedLP[msg.sender].pop();
         uint blackHoleShare = lockPercentageUINT();
-        uint blackholeDonation = (blackHoleShare * batch.amount).div(1000);
+        uint blackholeDonation = (blackHoleShare * batch.amount).div(100);
         emit LPClaimed(msg.sender, batch.amount, block.timestamp, blackholeDonation, globalLPLockTime);
         config.tokenPair.transfer(address(0), blackholeDonation);
         return config.tokenPair.transfer(batch.holder, batch.amount-blackholeDonation);
@@ -292,7 +288,7 @@ contract LiquidVault is Ownable {
         calibration.d = d;
     }
 
-    function calibrateLockPercentage(bytes16 d_max,bytes16 P0,bytes16 d0,bytes16 beta) public onlyOwner {
+    function calibrateLockPercentage(bytes16 d_max, bytes16 P0, bytes16 d0, bytes16 beta) public onlyOwner {
         lockPercentageCalibration.d_max = d_max;
         lockPercentageCalibration.P0 = P0;
         lockPercentageCalibration.d0 = d0;
@@ -323,12 +319,12 @@ contract LiquidVault is Ownable {
         return ABDKMathQuad.toUInt(fee());
     }
 
-    function _calculateLockPercentage(uint amount) public view returns (bytes16) {
+    function _calculateLockPercentage(uint amount) internal view returns (bytes16) {
         //d = d_max*(1/(b.p+1));
         bytes16 ONE = ABDKMathQuad.fromUInt(uint(1));
         bytes16 price = ABDKMathQuad.div(
             ABDKMathQuad.fromUInt(config.uniswapOracle.consult(config.R3T, amount, config.weth)),
-            0x403abc16d674ec800000000000000000
+            0x403abc16d674ec800000000000000000 // 1e18
         );
         bytes16 denominator = ABDKMathQuad.add(ONE, ABDKMathQuad.mul(lockPercentageCalibration.beta, price));
         bytes16 factor = ABDKMathQuad.div(ONE, denominator);

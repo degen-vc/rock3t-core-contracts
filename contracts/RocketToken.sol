@@ -31,7 +31,7 @@ contract RocketToken is Context, IERC20, Ownable {
     constructor(address _feeDistributor, address feeApprover, address _router, address _factory) {
         _totalSupply = 11e6 * 1e18;
         _setupDecimals(18);
-        _balances[msg.sender] = _totalSupply;
+        _balances[_msgSender()] = _totalSupply;
         transferCheckerAddress = feeApprover;
         feeDistributor = _feeDistributor;
         uniswapRouter = IUniswapV2Router02(_router);
