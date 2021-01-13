@@ -22,7 +22,6 @@ contract('uniswap oracle', function(accounts) {
   const defaultWindowSize = 86400 // 24 hours
   const defaultGranularity = 24 // 1 hour each
 
-  const ethFee = 0;
   const feeReceiver = accounts[8];
 
   let uniswapOracle;

@@ -15,7 +15,6 @@ const {
 
 module.exports = async function (deployer, network, accounts) {
     const fee = 0
-    const blackHoleFee = 10 // 1%;
     const defaultWindowSize = 86400 // 24 hours
     const defaultGranularity = 24 // 1 hour each
 
@@ -59,7 +58,6 @@ module.exports = async function (deployer, network, accounts) {
     await liquidVaultInstance.seed(
       rocketTokenInstance.address, 
       feeDistributorInstance.address,
-      blackHoleFee,
       UNISWAP_ROUTER,
       uniswapPair,
       TREASURY,

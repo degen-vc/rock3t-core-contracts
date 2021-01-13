@@ -40,7 +40,6 @@ contract LiquidVault is Ownable {
         SlidingWindowOracle uniswapOracle;
         address self;
         address weth;
-        uint8 blackHoleShare; //0-100
     }
 
     struct PurchaseLPVariables {
@@ -116,7 +115,6 @@ contract LiquidVault is Ownable {
     function seed(
         address r3t,
         address feeDistributor,
-        uint8 blackHoleShare,
         address uniswapRouter,
         address uniswapPair,
         address _treasury,
@@ -128,17 +126,12 @@ contract LiquidVault is Ownable {
         config.uniswapRouter = IUniswapV2Router02(uniswapRouter);
         config.weth = config.uniswapRouter.WETH();
         config.self = address(this);
-        config.blackHoleShare = blackHoleShare;
         treasury = _treasury;
         config.uniswapOracle = SlidingWindowOracle(_uniswapOracle);
     }
 
     function getLockedPeriod() external view returns (uint256) {
         return _calculateLockPeriod();
-    }
-
-    function getLPBurnPercentage() external view returns (uint256) {
-        return config.blackHoleShare;
     }
 
     function flushToTreasury(uint amount) public onlyOwner {

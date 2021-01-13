@@ -23,8 +23,6 @@ contract.only('liquid vault', function(accounts) {
   const nftFund = accounts[9];
   const baseUnit = bn('1000000000000000000');
 
-  const ethFee = 0 // 1%;
-  const blackHoleFee = 10 // 1%;
   const feeReceiver = accounts[8];
   const treasury = accounts[7];
   const startTime = Math.floor(Date.now() / 1000);
@@ -61,7 +59,6 @@ contract.only('liquid vault', function(accounts) {
     await liquidVault.seed(
       rocketToken.address,
       feeDistributor.address,
-      blackHoleFee,
       uniswapRouter.address,
       uniswapPair,
       treasury,
@@ -81,7 +78,6 @@ contract.only('liquid vault', function(accounts) {
       assert.equal(config.uniswapRouter, uniswapRouter.address);
       assert.equal(config.weth, weth.address);
       assert.equal(config.self, liquidVault.address);
-      assert.equal(config.blackHoleShare, blackHoleFee);
       assert.equal(treasury, treasury);
     });
 

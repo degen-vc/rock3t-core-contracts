@@ -21,9 +21,6 @@ contract('liquid vault', function(accounts) {
   const NOT_OWNER = accounts[1];
   const baseUnit = bn('1000000000000000000');
 
-  const ethFee = 0;
-  const blackHoleFee = 10;
-  const lvEthFeePercent = 10;
   const feeReceiver = accounts[8];
   const treasury = accounts[7];
   const startTime = Math.floor(Date.now() / 1000);
@@ -64,7 +61,6 @@ contract('liquid vault', function(accounts) {
     await liquidVault.seed(
       rocketToken.address,
       feeDistributor.address,
-      blackHoleFee,
       uniswapRouter.address,
       uniswapPair,
       treasury,
