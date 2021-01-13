@@ -32,7 +32,7 @@ contract('rocket token', accounts => {
     feeApprover = await FeeApprover.new();
     rocketToken = await RocketToken.new(feeDestination, feeApprover.address, uniswapRouter.address, uniswapFactory.address);
 
-    await feeApprover.initialize(rocketToken.address, uniswapFactory.address, uniswapRouter.address, liquidVault, { from: owner });
+    await feeApprover.initialize(rocketToken.address, uniswapFactory.address, uniswapRouter.address);
     await feeApprover.unPause({ from: owner });
 
     await ganache.snapshot();

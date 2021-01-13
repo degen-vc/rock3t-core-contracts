@@ -54,10 +54,10 @@ contract('liquid vault', function(accounts) {
     liquidVault = await LiquidVault.new();
     uniswapOracle = await SlidingWindowOracle.new(uniswapFactory.address, defaultWindowSize, defaultGranularity);
 
-    await feeApprover.initialize(rocketToken.address, uniswapFactory.address, uniswapRouter.address, liquidVault.address);
+    await feeApprover.initialize(rocketToken.address, uniswapFactory.address, uniswapRouter.address);
     await feeApprover.unPause();
     await feeApprover.setFeeMultiplier(0);
-    
+
     await feeDistributor.seed(rocketToken.address, liquidVault.address, OWNER, 0);
     uniswapPair = await rocketToken.tokenUniswapPair();
 

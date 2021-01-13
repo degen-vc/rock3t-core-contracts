@@ -32,7 +32,7 @@ contract('fee distributor', accounts => {
     feeDistributor = await FeeDistributor.new();
     rocketToken = await RocketToken.new(feeDistributor.address, feeApprover.address, uniswapRouter.address, uniswapFactory.address);
 
-    await feeApprover.initialize(rocketToken.address, uniswapFactory.address, uniswapRouter.address, liquidVault, { from: owner });
+    await feeApprover.initialize(rocketToken.address, uniswapFactory.address, uniswapRouter.address, { from: owner });
     await feeApprover.unPause({ from: owner });
     await feeApprover.setFeeMultiplier(0);
 

@@ -12,8 +12,7 @@ contract FeeApprover is Ownable {
     function initialize(
         address _R3Ttoken,
         address _uniswapFactory,
-        address _uniswapRouter,
-        address _liquidVault
+        address _uniswapRouter
     ) public onlyOwner {
         rocketTokenAddress = _R3Ttoken;
 
@@ -25,12 +24,10 @@ contract FeeApprover is Ownable {
         paused = true;
         _setFeeDiscountTo(tokenUniswapPair, 1000);
         _setFeeDiscountFrom(tokenUniswapPair, 1000);
-        liquidVault = _liquidVault;
     }
 
     address tokenUniswapPair;
     address rocketTokenAddress;
-    address liquidVault;
     uint8 public feePercentX100;
     bool paused;
     mapping(address => uint256) public discountFrom;
