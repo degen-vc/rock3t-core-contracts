@@ -49,12 +49,14 @@ contract('liquid vault', function(accounts) {
     rocketToken = await RocketToken.new(feeDistributor.address, feeApprover.address, uniswapRouter.address, uniswapFactory.address);
     liquidVault = await LiquidVault.new();
 
-    await feeApprover.initialize(rocketToken.address, uniswapFactory.address, uniswapRouter.address);
+    await rocketToken.createUniswapPair();
+    uniswapPair = await rocketToken.tokenUniswapPair();
+
+    await feeApprover.initialize(uniswapPair, liquidVault.address);
     await feeApprover.unPause();
     await feeApprover.setFeeMultiplier(0);
 
     await feeDistributor.seed(rocketToken.address, liquidVault.address, OWNER, 0);
-    uniswapPair = await rocketToken.tokenUniswapPair();
 
     await liquidVault.seed(
       rocketToken.address,

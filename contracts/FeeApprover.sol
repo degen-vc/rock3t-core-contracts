@@ -9,27 +9,21 @@ import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 contract FeeApprover is Ownable {
     using SafeMath for uint256;
 
-    function initialize(
-        address _R3Ttoken,
-        address _uniswapFactory,
-        address _uniswapRouter
-    ) public onlyOwner {
-        rocketTokenAddress = _R3Ttoken;
+    function initialize(address _tokenUniswapPair, address _liquidVault) public onlyOwner {
+        require(_tokenUniswapPair != address(0) && _liquidVault != address(0), "Zero addresses not allowed");
+        require(!initiated, "FeeApprover: already initiated");
 
-        tokenUniswapPair = IUniswapV2Factory(_uniswapFactory).getPair(
-            IUniswapV2Router02(_uniswapRouter).WETH(),
-            _R3Ttoken
-        );
-        feePercentX100 = 10;
         paused = true;
-        _setFeeDiscountTo(tokenUniswapPair, 1000);
-        _setFeeDiscountFrom(tokenUniswapPair, 1000);
+        initiated = true;
+        _setFeeDiscountTo(_tokenUniswapPair, 1000);
+        _setFeeDiscountFrom(_tokenUniswapPair, 1000);
+        _setFeeDiscountTo(_liquidVault, 1000);
+        _setFeeDiscountFrom(_liquidVault, 1000);
     }
 
-    address tokenUniswapPair;
-    address rocketTokenAddress;
-    uint8 public feePercentX100;
+    uint8 public feePercentX100 = 10;
     bool paused;
+    bool initiated;
     mapping(address => uint256) public discountFrom;
     mapping(address => uint256) public discountTo;
     mapping(address => uint256) public feeBlackList;

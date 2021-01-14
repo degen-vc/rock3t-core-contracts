@@ -41,22 +41,28 @@ module.exports = async function (deployer, network, accounts) {
     await deployer.deploy(SlidingWindowOracle, UNISWAP_FACTORY, defaultWindowSize, defaultGranularity);
     const uniswapOracle = await SlidingWindowOracle.deployed();
     
-    const uniswapPair = await rocketTokenInstance.tokenUniswapPair();
+    let uniswapPair = await rocketTokenInstance.tokenUniswapPair();
 
     await pausePromise('seed fee approver');
-    await feeApproverInstance.initialize(rocketTokenInstance.address, UNISWAP_FACTORY, UNISWAP_ROUTER, liquidVaultInstance.address);
-    await feeApproverInstance.unPause();
+    // create uniswap pair manually on production and initialize/unpause fee approver
+    if (network !== 'mainnet') {
+        await rocketTokenInstance.createUniswapPair();
+        uniswapPair = await rocketTokenInstance.tokenUniswapPair();
+
+        await feeApproverInstance.initialize(uniswapPair, liquidVaultInstance.address);
+        await feeApproverInstance.unPause();
+    }
 
     await pausePromise('seed fee distributor');
     await feeDistributorInstance.seed(
-        rocketTokenInstance.address, 
-        liquidVaultInstance.address, 
-        FEE_RECEIVER, 
+        rocketTokenInstance.address,
+        liquidVaultInstance.address,
+        FEE_RECEIVER,
         SECONDARY_ADDRESS_SHARE
     );
     await pausePromise('seed liquidity vault');
     await liquidVaultInstance.seed(
-      rocketTokenInstance.address, 
+      rocketTokenInstance.address,
       feeDistributorInstance.address,
       UNISWAP_ROUTER,
       uniswapPair,

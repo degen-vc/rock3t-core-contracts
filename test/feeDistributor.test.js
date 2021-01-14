@@ -31,9 +31,11 @@ contract('fee distributor', accounts => {
     feeApprover = await FeeApprover.new();
     feeDistributor = await FeeDistributor.new();
     rocketToken = await RocketToken.new(feeDistributor.address, feeApprover.address, uniswapRouter.address, uniswapFactory.address);
+    await rocketToken.createUniswapPair();
+    uniswapPair = await rocketToken.tokenUniswapPair();
 
-    await feeApprover.initialize(rocketToken.address, uniswapFactory.address, uniswapRouter.address, { from: owner });
-    await feeApprover.unPause({ from: owner });
+    await feeApprover.initialize(uniswapPair, liquidVault);
+    await feeApprover.unPause();
     await feeApprover.setFeeMultiplier(0);
 
     await ganache.snapshot();
