@@ -10,11 +10,11 @@ const {
     UNISWAP_FACTORY, 
     UNISWAP_ROUTER,
     TREASURY,
-    FEE_RECEIVER
+    FEE_RECEIVER,
+    SECONDARY_ADDRESS_SHARE
 } = process.env;
 
 module.exports = async function (deployer, network, accounts) {
-    const fee = 0
     const defaultWindowSize = 86400 // 24 hours
     const defaultGranularity = 24 // 1 hour each
 
@@ -52,7 +52,7 @@ module.exports = async function (deployer, network, accounts) {
         rocketTokenInstance.address, 
         liquidVaultInstance.address, 
         FEE_RECEIVER, 
-        fee
+        SECONDARY_ADDRESS_SHARE
     );
     await pausePromise('seed liquidity vault');
     await liquidVaultInstance.seed(
