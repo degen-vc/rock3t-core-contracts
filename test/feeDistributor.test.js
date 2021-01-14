@@ -3,6 +3,7 @@ const { expectEvent, expectRevert, constants } = require("@openzeppelin/test-hel
 const deployUniswap = require('./helpers/deployUniswap');
 const FeeDistributor = artifacts.require('FeeDistributor');
 const RocketToken = artifacts.require('RocketToken');
+const FeeApprover = artifacts.require('FeeApprover');
 
 contract('fee distributor', accounts => {
   const ganache = new Ganache(web3);
@@ -16,6 +17,7 @@ contract('fee distributor', accounts => {
   const assertBNequal = (bnOne, bnTwo) => assert.equal(bnOne.toString(), bnTwo.toString());
 
   let feeDistributor;
+  let feeApprover;
   let rocketToken;
   let uniswapPair;
   let uniswapFactory;
@@ -26,8 +28,13 @@ contract('fee distributor', accounts => {
     uniswapFactory = contracts.uniswapFactory;
     uniswapRouter = contracts.uniswapRouter;
 
+    feeApprover = await FeeApprover.new();
     feeDistributor = await FeeDistributor.new();
-    rocketToken = await RocketToken.new(0, feeDistributor.address, uniswapRouter.address, uniswapFactory.address);
+    rocketToken = await RocketToken.new(feeDistributor.address, feeApprover.address, uniswapRouter.address, uniswapFactory.address);
+
+    await feeApprover.initialize(rocketToken.address, uniswapFactory.address, uniswapRouter.address, { from: owner });
+    await feeApprover.unPause({ from: owner });
+    await feeApprover.setFeeMultiplier(0);
 
     await ganache.snapshot();
   });

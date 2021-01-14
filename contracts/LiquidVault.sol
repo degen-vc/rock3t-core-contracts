@@ -11,12 +11,14 @@ import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 import '@uniswap/v2-periphery/contracts/libraries/UniswapV2OracleLibrary.sol';
 import './UniswapV2Library.sol';
 import 'abdk-libraries-solidity/ABDKMathQuad.sol';
+import './SlidingWindowOracle.sol';
 
 contract LiquidVault is Ownable {
     using SafeMath for uint256;
 
     liquidVaultConfig public config;
     BuyPressureVariables public calibration;
+    LockPercentageVariables public lockPercentageCalibration;
 
     uint public globalLPLockTime;
     address public treasury;
@@ -35,9 +37,9 @@ contract LiquidVault is Ownable {
         IUniswapV2Router02 uniswapRouter;
         IUniswapV2Pair tokenPair;
         FeeDistributorLike feeDistributor;
+        SlidingWindowOracle uniswapOracle;
         address self;
         address weth;
-        uint8 blackHoleShare; //0-100
     }
 
     struct PurchaseLPVariables {
@@ -53,6 +55,13 @@ contract LiquidVault is Ownable {
         bytes16 c;
         bytes16 d;
         uint maxReserves;
+    }
+
+    struct LockPercentageVariables {
+        bytes16 d_max; //maximum lock percentage
+        bytes16 P0; //normal price
+        bytes16 d0; //normal permanent lock percentage
+        bytes16 beta; //Calibration coefficient
     }
 
     /*
@@ -83,6 +92,13 @@ contract LiquidVault is Ownable {
             0x00000000000000000000000000000000, // d = 0
             500000 // maxReserves
         );
+
+        calibrateLockPercentage(
+            0x40014000000000000000000000000000, // d_max =  5
+            0x3ff7cac083126e978d4fdf3b645a1cac, // p0 = 7e-3
+            0x40004000000000000000000000000000, // d0 = 25e-1
+            0x40061db6db6db5a1484ad8a787aa1421 // beta = 142.857
+        );
         unlocked = true;
     }
 
@@ -101,10 +117,10 @@ contract LiquidVault is Ownable {
     function seed(
         address r3t,
         address feeDistributor,
-        uint8 blackHoleShare,
         address uniswapRouter,
         address uniswapPair,
-        address _treasury
+        address _treasury,
+        address _uniswapOracle
     ) public onlyOwner {
         config.R3T = r3t;
         config.feeDistributor = FeeDistributorLike(feeDistributor);
@@ -112,31 +128,12 @@ contract LiquidVault is Ownable {
         config.uniswapRouter = IUniswapV2Router02(uniswapRouter);
         config.weth = config.uniswapRouter.WETH();
         config.self = address(this);
-        config.blackHoleShare = blackHoleShare;
         treasury = _treasury;
+        config.uniswapOracle = SlidingWindowOracle(_uniswapOracle);
     }
 
     function getLockedPeriod() external view returns (uint256) {
         return _calculateLockPeriod();
-    }
-
-    function getLPBurnPercentage() external view returns (uint256) {
-        return config.blackHoleShare;
-    }
-
-    function getCurrentTokenPrice() external view returns (uint256) {
-        (uint256 _price0Cumulative, uint256 _price1Cumulative, uint32 _blockTimestamp) =
-            UniswapV2OracleLibrary.currentCumulativePrices(address(config.tokenPair));
-
-        (address token0, ) = config.R3T < config.weth
-            ? (config.R3T, config.weth)
-            : (config.weth, config.R3T);
-
-        if (token0 == config.R3T) {
-            return _price0Cumulative;
-        } else {
-            return _price1Cumulative;
-        }
     }
 
     function flushToTreasury(uint amount) public onlyOwner {
@@ -226,7 +223,8 @@ contract LiquidVault is Ownable {
             "R3T: LP still locked."
         );
         LockedLP[msg.sender].pop();
-        uint blackholeDonation = (config.blackHoleShare * batch.amount).div(1000);
+        uint blackHoleShare = lockPercentageUINT();
+        uint blackholeDonation = (blackHoleShare * batch.amount).div(100);
         emit LPClaimed(msg.sender, batch.amount, block.timestamp, blackholeDonation, globalLPLockTime);
         config.tokenPair.transfer(address(0), blackholeDonation);
         return config.tokenPair.transfer(batch.holder, batch.amount-blackholeDonation);
@@ -286,6 +284,13 @@ contract LiquidVault is Ownable {
         calibration.maxReserves = maxReserves;
     }
 
+    function calibrateLockPercentage(bytes16 d_max, bytes16 P0, bytes16 d0, bytes16 beta) public onlyOwner {
+        lockPercentageCalibration.d_max = d_max;
+        lockPercentageCalibration.P0 = P0;
+        lockPercentageCalibration.d0 = d0;
+        lockPercentageCalibration.beta = beta;
+    }
+
     function square(bytes16 number) internal pure returns (bytes16) {
         return ABDKMathQuad.mul(number, number);
     }
@@ -313,5 +318,22 @@ contract LiquidVault is Ownable {
 
     function feeUINT() public view returns (uint) {
         return ABDKMathQuad.toUInt(fee());
+    }
+
+    function _calculateLockPercentage(uint amount) internal view returns (bytes16) {
+        //d = d_max*(1/(b.p+1));
+        bytes16 ONE = ABDKMathQuad.fromUInt(uint(1));
+        bytes16 price = ABDKMathQuad.div(
+            ABDKMathQuad.fromUInt(config.uniswapOracle.consult(config.R3T, amount, config.weth)),
+            0x403abc16d674ec800000000000000000 // 1e18
+        );
+        bytes16 denominator = ABDKMathQuad.add(ONE, ABDKMathQuad.mul(lockPercentageCalibration.beta, price));
+        bytes16 factor = ABDKMathQuad.div(ONE, denominator);
+        return ABDKMathQuad.mul(lockPercentageCalibration.d_max, factor);
+    }
+
+    function lockPercentageUINT() public view returns (uint) {
+        uint amount = 1e18;
+        return ABDKMathQuad.toUInt(_calculateLockPercentage(amount));
     }
 }

@@ -4,12 +4,12 @@ const { expectEvent, expectRevert, constants } = require("@openzeppelin/test-hel
 
 const FeeDistributor = artifacts.require('FeeDistributor');
 const RocketToken = artifacts.require('RocketToken');
+const FeeApprover = artifacts.require('FeeApprover');
 
 contract('rocket token', accounts => {
   const ganache = new Ganache(web3);
-  const [ owner, feeDestination, notOwner ] = accounts;
+  const [ owner, feeDestination, notOwner, liquidVault ] = accounts;
   const { ZERO_ADDRESS } = constants;
-  const rocketFee = 100; //10%
 
   afterEach('revert', ganache.revert);
 
@@ -21,6 +21,7 @@ contract('rocket token', accounts => {
   let weth;
 
   let rocketToken;
+  let feeApprover;
 
   before('setup others', async function() {
     const contracts = await deployUniswap(accounts);
@@ -28,30 +29,51 @@ contract('rocket token', accounts => {
     uniswapRouter = contracts.uniswapRouter;
     weth = contracts.weth;
 
-    rocketToken = await RocketToken.new(rocketFee, feeDestination, uniswapRouter.address, uniswapFactory.address);
+    feeApprover = await FeeApprover.new();
+    rocketToken = await RocketToken.new(feeDestination, feeApprover.address, uniswapRouter.address, uniswapFactory.address);
+
+    await feeApprover.initialize(rocketToken.address, uniswapFactory.address, uniswapRouter.address);
+    await feeApprover.unPause({ from: owner });
 
     await ganache.snapshot();
   });
+
+  it('should create a uniswap pair', async () => {
+      const pairAddressBefore = await rocketToken.tokenUniswapPair.call();
+      assert.equal(pairAddressBefore, ZERO_ADDRESS);
+
+      const createPair = await rocketToken.createUniswapPair();
+      expectEvent.inTransaction(createPair.tx, uniswapFactory, 'PairCreated');
+      
+  });
   
   it('should create a uniswap pair only once', async () => {
+      await rocketToken.createUniswapPair();
+
       await expectRevert(
           rocketToken.createUniswapPair(),
           'Token: pool already created'
       );
   });
 
-  it('should not configure the fee for non-owner', async () => {
+  it('should revert if pair creator is not an owner', async () => {
       await expectRevert(
-          rocketToken.configureFee(rocketFee, feeDestination, { from: notOwner }),
+          rocketToken.createUniswapPair({ from: notOwner }),
+          'Ownable: caller is not the owner'
+      );
+  });
+
+  it('should not configure the fee distributor for non-owner', async () => {
+      await expectRevert(
+          rocketToken.setFeeDistributor(feeDestination, { from: notOwner }),
           'Ownable: caller is not the owner'
       );
   });
 
   it('should set the fee to 5 pecentage by an owner', async () => {
-      const expectedFee = 50; //5%
-      await rocketToken.configureFee(expectedFee, feeDestination, { from: owner });
-
-      assertBNequal(await rocketToken.fee(), expectedFee);
+      const expectedFee = 50; //50%
+      await feeApprover.setFeeMultiplier(expectedFee);
+      assertBNequal(await feeApprover.feePercentX100.call(), expectedFee);
   });
 
   it('should check totalSupply to be equal 11 000 000', async () => {
@@ -64,16 +86,15 @@ contract('rocket token', accounts => {
   it('should collect fee while transfer and send it to the destination address', async () => {
       const feeDestinationBefore = await rocketToken.balanceOf(feeDestination);
       const amountToSend = 10000;
-      const fee = await rocketToken.fee();
+      const fee = await feeApprover.feePercentX100.call();
 
       await rocketToken.transfer(notOwner, amountToSend);
-
+      
       const feeDestinationAfter = await rocketToken.balanceOf(feeDestination);
-      const expectdFeeAmount = (fee * amountToSend) / 1000;
+      const expectdFeeAmount = (fee * amountToSend) / 100;
       const recepientBalance = await rocketToken.balanceOf(notOwner);
       const expectedBalance = amountToSend - expectdFeeAmount;
       
-      assertBNequal(fee, rocketFee);
       assertBNequal(feeDestinationBefore, 0);
       assertBNequal(feeDestinationAfter, expectdFeeAmount);
       assertBNequal(recepientBalance, expectedBalance);
