@@ -36,8 +36,6 @@ contract RocketToken is Context, IERC20, Ownable {
         feeDistributor = _feeDistributor;
         uniswapRouter = IUniswapV2Router02(_router);
         uniswapFactory = IUniswapV2Factory(_factory);
-
-        createUniswapPair();
     }
 
     /**
@@ -104,7 +102,7 @@ contract RocketToken is Context, IERC20, Ownable {
 
     address public tokenUniswapPair;
 
-    function createUniswapPair() public returns (address) {
+    function createUniswapPair() public onlyOwner returns (address) {
         require(tokenUniswapPair == address(0), "Token: pool already created");
         tokenUniswapPair = uniswapFactory.createPair(
             address(uniswapRouter.WETH()),

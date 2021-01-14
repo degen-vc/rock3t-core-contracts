@@ -37,11 +37,29 @@ contract('rocket token', accounts => {
 
     await ganache.snapshot();
   });
+
+  it('should create a uniswap pair', async () => {
+      const pairAddressBefore = await rocketToken.tokenUniswapPair.call();
+      assert.equal(pairAddressBefore, ZERO_ADDRESS);
+
+      const createPair = await rocketToken.createUniswapPair();
+      expectEvent.inTransaction(createPair.tx, uniswapFactory, 'PairCreated');
+      
+  });
   
   it('should create a uniswap pair only once', async () => {
+      await rocketToken.createUniswapPair();
+
       await expectRevert(
           rocketToken.createUniswapPair(),
           'Token: pool already created'
+      );
+  });
+
+  it('should revert if pair creator is not an owner', async () => {
+      await expectRevert(
+          rocketToken.createUniswapPair({ from: notOwner }),
+          'Ownable: caller is not the owner'
       );
   });
 
