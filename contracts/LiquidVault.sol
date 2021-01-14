@@ -138,7 +138,7 @@ contract LiquidVault is Ownable {
 
     function flushToTreasury(uint amount) public onlyOwner {
         require(treasury != address(0),"R3T: treasury not set");
-        IERC20(config.R3T).transfer(treasury,amount);
+        IERC20(config.R3T).transfer(treasury, amount);
     }
 
     function purchaseLPFor(address beneficiary) public payable lock updateLockTime {

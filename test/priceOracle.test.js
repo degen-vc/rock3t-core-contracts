@@ -42,10 +42,12 @@ contract('uniswap oracle', function(accounts) {
     // deploy and setup main contracts
     feeApprover = await FeeApprover.new();
     rocketToken = await RocketToken.new(feeReceiver, feeApprover.address, uniswapRouter.address, uniswapFactory.address);
-    uniswapPair = await rocketToken.tokenUniswapPair();
     uniswapOracle = await SlidingWindowOracle.new(uniswapFactory.address, defaultWindowSize, defaultGranularity);
-    
-    await feeApprover.initialize(rocketToken.address, uniswapFactory.address, uniswapRouter.address);
+
+    await rocketToken.createUniswapPair();
+    uniswapPair = await rocketToken.tokenUniswapPair();
+
+    await feeApprover.initialize(uniswapPair, liquidVault);
     await feeApprover.unPause();
     await feeApprover.setFeeMultiplier(0);
 
