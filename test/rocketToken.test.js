@@ -8,7 +8,7 @@ const FeeApprover = artifacts.require('FeeApprover');
 
 contract('rocket token', accounts => {
   const ganache = new Ganache(web3);
-  const [ owner, feeDestination, notOwner, liquidVault ] = accounts;
+  const [ owner, feeDestination, notOwner, liquidVault, uniswapPair] = accounts;
   const { ZERO_ADDRESS } = constants;
 
   afterEach('revert', ganache.revert);
@@ -31,6 +31,9 @@ contract('rocket token', accounts => {
 
     feeApprover = await FeeApprover.new();
     rocketToken = await RocketToken.new(feeDestination, feeApprover.address, uniswapRouter.address, uniswapFactory.address);
+
+    await feeApprover.initialize(uniswapPair, liquidVault);
+    await feeApprover.unPause();
 
     await ganache.snapshot();
   });

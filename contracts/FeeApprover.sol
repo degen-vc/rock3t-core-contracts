@@ -22,8 +22,8 @@ contract FeeApprover is Ownable {
     }
 
     uint8 public feePercentX100 = 10;
-    bool paused;
-    bool initiated;
+    bool public paused;
+    bool public initiated;
     mapping(address => uint256) public discountFrom;
     mapping(address => uint256) public discountTo;
     mapping(address => uint256) public feeBlackList;
@@ -41,45 +41,45 @@ contract FeeApprover is Ownable {
         feePercentX100 = _feeMultiplier;
     }
 
-    function setFeeBlackList(address _address, uint256 feeAmount)
+    function setFeeBlackList(address _address, uint256 _feeAmount)
         public
         onlyOwner
     {
         require(
-            feeAmount <= 100,
+            _feeAmount <= 100,
             "R3T: percentage expressed as number between 0 and 100"
         );
-        feeBlackList[_address] = feeAmount;
+        feeBlackList[_address] = _feeAmount;
     }
 
-    function setFeeDiscountTo(address _address, uint256 discount)
+    function setFeeDiscountTo(address _address, uint256 _discount)
         public
         onlyOwner
     {
-        _setFeeDiscountTo(_address, discount);
+        _setFeeDiscountTo(_address, _discount);
     }
 
-    function _setFeeDiscountTo(address _address, uint256 discount) internal {
+    function _setFeeDiscountTo(address _address, uint256 _discount) internal {
         require(
-            discount <= 1000,
+            _discount <= 1000,
             "R3T: discount expressed as percentage between 0 and 1000"
         );
-        discountTo[_address] = discount;
+        discountTo[_address] = _discount;
     }
 
-    function setFeeDiscountFrom(address _address, uint256 discount)
+    function setFeeDiscountFrom(address _address, uint256 _discount)
         public
         onlyOwner
     {
-        _setFeeDiscountFrom(_address, discount);
+        _setFeeDiscountFrom(_address, _discount);
     }
 
-    function _setFeeDiscountFrom(address _address, uint256 discount) internal {
+    function _setFeeDiscountFrom(address _address, uint256 _discount) internal {
         require(
-            discount <= 1000,
+            _discount <= 1000,
             "R3T: discount expressed as percentage between 0 and 1000"
         );
-        discountFrom[_address] = discount;
+        discountFrom[_address] = _discount;
     }
 
     function calculateAmountsAfterFee(
@@ -94,7 +94,7 @@ contract FeeApprover is Ownable {
             uint256 transferToFeeDistributorAmount
         )
     {
-        require(!paused, "R3T: system not yet initialized");
+        require(!paused && initiated, "R3T: system not yet initialized");
         uint256 fee;
         if (feeBlackList[sender] > 0) {
             fee = feeBlackList[sender].mul(amount).div(100);
