@@ -2,7 +2,6 @@ const Ganache = require('./helpers/ganache');
 const deployUniswap = require('./helpers/deployUniswap');
 const { expectEvent, expectRevert, constants } = require("@openzeppelin/test-helpers");
 
-const FeeDistributor = artifacts.require('FeeDistributor');
 const RocketToken = artifacts.require('RocketToken');
 const FeeApprover = artifacts.require('FeeApprover');
 
@@ -13,12 +12,10 @@ contract('rocket token', accounts => {
 
   afterEach('revert', ganache.revert);
 
-  const bn = (input) => web3.utils.toBN(input);
   const assertBNequal = (bnOne, bnTwo) => assert.equal(bnOne.toString(), bnTwo.toString());
 
   let uniswapFactory;
   let uniswapRouter;
-  let weth;
 
   let rocketToken;
   let feeApprover;
@@ -27,7 +24,6 @@ contract('rocket token', accounts => {
     const contracts = await deployUniswap(accounts);
     uniswapFactory = contracts.uniswapFactory;
     uniswapRouter = contracts.uniswapRouter;
-    weth = contracts.weth;
 
     feeApprover = await FeeApprover.new();
     rocketToken = await RocketToken.new(feeDestination, feeApprover.address, uniswapRouter.address, uniswapFactory.address);

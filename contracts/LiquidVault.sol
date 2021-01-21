@@ -173,7 +173,7 @@ contract LiquidVault is Ownable {
         address tokenPairAddress = address(config.tokenPair);
         IWETH(config.weth).transfer(tokenPairAddress, VARS.netEth);
         IERC20(config.R3T).transfer(tokenPairAddress, r3tRequired);
-
+        config.uniswapOracle.update(config.weth, config.R3T);
 
         uint256 liquidityCreated = config.tokenPair.mint(config.self);
 

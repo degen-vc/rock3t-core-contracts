@@ -1,6 +1,5 @@
 const Ganache = require('./helpers/ganache');
 const deployUniswap = require('./helpers/deployUniswap');
-const { expectEvent, expectRevert, constants } = require("@openzeppelin/test-helpers");
 
 const FeeDistributor = artifacts.require('FeeDistributor');
 const RocketToken = artifacts.require('RocketToken');
@@ -17,13 +16,9 @@ contract('liquid vault', function(accounts) {
   const assertBNequal = (bnOne, bnTwo) => assert.equal(bnOne.toString(), bnTwo.toString());
 
   const OWNER = accounts[0];
-  const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
-  const NOT_OWNER = accounts[1];
   const baseUnit = bn('1000000000000000000');
 
-  const feeReceiver = accounts[8];
   const treasury = accounts[7];
-  const startTime = Math.floor(Date.now() / 1000);
 
   const defaultWindowSize = 86400 // 24 hours
   const defaultGranularity = 24 // 1 hour each

@@ -1,13 +1,14 @@
 
 const Ganache = require('./helpers/ganache');
 const deployUniswap = require('./helpers/deployUniswap');
-const { expectEvent, expectRevert, constants } = require("@openzeppelin/test-helpers");
+const { expectEvent, expectRevert } = require("@openzeppelin/test-helpers");
 
 const FeeDistributor = artifacts.require('FeeDistributor');
 const RocketToken = artifacts.require('RocketToken');
 const LiquidVault = artifacts.require('LiquidVault');
 const IUniswapV2Pair = artifacts.require('IUniswapV2Pair');
 const FeeApprover = artifacts.require('FeeApprover');
+const SlidingWindowOracle = artifacts.require('SlidingWindowOracle');
 
 
 contract('liquid vault buy pressure', function(accounts) {
@@ -18,21 +19,18 @@ contract('liquid vault buy pressure', function(accounts) {
   const assertBNequal = (bnOne, bnTwo) => assert.equal(bnOne.toString(), bnTwo.toString());
 
   const OWNER = accounts[0];
-  const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
   const NOT_OWNER = accounts[1];
-  const nftFund = accounts[9];
   const baseUnit = bn('1000000000000000000');
 
-  const ethFee = 0 // 1%;
-  const blackHoleFee = 10 // 1%;
-  const feeReceiver = accounts[8];
   const treasury = accounts[7];
-  const startTime = Math.floor(Date.now() / 1000);
 
+  const defaultWindowSize = 14400 // 4 hours
+  const defaultGranularity = 8 // 0.5 hour each
+
+  let uniswapOracle;
   let uniswapPair;
   let uniswapFactory;
   let uniswapRouter;
-  let weth;
 
   let feeDistributor;
   let rocketToken;
@@ -43,13 +41,13 @@ contract('liquid vault buy pressure', function(accounts) {
     const contracts = await deployUniswap(accounts);
     uniswapFactory = contracts.uniswapFactory;
     uniswapRouter = contracts.uniswapRouter;
-    weth = contracts.weth;
 
     // deploy and setup main contracts
     feeApprover = await FeeApprover.new();
     feeDistributor = await FeeDistributor.new();
     rocketToken = await RocketToken.new(feeDistributor.address, feeApprover.address, uniswapRouter.address, uniswapFactory.address);
     liquidVault = await LiquidVault.new();
+    uniswapOracle = await SlidingWindowOracle.new(uniswapFactory.address, defaultWindowSize, defaultGranularity);
 
     await rocketToken.createUniswapPair();
     uniswapPair = await rocketToken.tokenUniswapPair();
@@ -65,7 +63,7 @@ contract('liquid vault buy pressure', function(accounts) {
       uniswapRouter.address,
       uniswapPair,
       treasury,
-      NOT_OWNER
+      uniswapOracle.address
     );
 
     await ganache.snapshot();
@@ -235,7 +233,6 @@ contract('liquid vault buy pressure', function(accounts) {
 
     assert.equal(result.logs.length, 1);
     const rocketRequired = result.logs[0].args.r3t;
-    const netEth = result.logs[0].args.eth;
 
     const ethFee = bn(10000).mul(bn(20)).div(bn(100));
 
@@ -282,7 +279,6 @@ contract('liquid vault buy pressure', function(accounts) {
 
     assert.equal(result.logs.length, 1);
     const rocketRequired = result.logs[0].args.r3t;
-    const netEth = result.logs[0].args.eth;
 
     const ethFee = bn(10000).mul(bn(40)).div(bn(100));
 

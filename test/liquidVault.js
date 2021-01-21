@@ -8,6 +8,7 @@ const RocketToken = artifacts.require('RocketToken');
 const LiquidVault = artifacts.require('LiquidVault');
 const IUniswapV2Pair = artifacts.require('IUniswapV2Pair');
 const FeeApprover = artifacts.require('FeeApprover');
+const SlidingWindowOracle = artifacts.require('SlidingWindowOracle');
 
 
 contract('liquid vault', function(accounts) {
@@ -18,15 +19,16 @@ contract('liquid vault', function(accounts) {
   const assertBNequal = (bnOne, bnTwo) => assert.equal(bnOne.toString(), bnTwo.toString());
 
   const OWNER = accounts[0];
-  const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
   const NOT_OWNER = accounts[1];
-  const nftFund = accounts[9];
   const baseUnit = bn('1000000000000000000');
 
-  const feeReceiver = accounts[8];
   const treasury = accounts[7];
   const startTime = Math.floor(Date.now() / 1000);
 
+  const defaultWindowSize = 14400 // 4 hours
+  const defaultGranularity = 8 // 0.5 hour each
+
+  let uniswapOracle;
   let uniswapPair;
   let uniswapFactory;
   let uniswapRouter;
@@ -48,6 +50,7 @@ contract('liquid vault', function(accounts) {
     feeDistributor = await FeeDistributor.new();
     rocketToken = await RocketToken.new(feeDistributor.address, feeApprover.address, uniswapRouter.address, uniswapFactory.address);
     liquidVault = await LiquidVault.new();
+    uniswapOracle = await SlidingWindowOracle.new(uniswapFactory.address, defaultWindowSize, defaultGranularity);
 
     await rocketToken.createUniswapPair();
     uniswapPair = await rocketToken.tokenUniswapPair();
@@ -64,7 +67,7 @@ contract('liquid vault', function(accounts) {
       uniswapRouter.address,
       uniswapPair,
       treasury,
-      NOT_OWNER
+      uniswapOracle.address
     );
 
     await ganache.snapshot();
