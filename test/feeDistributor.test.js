@@ -8,8 +8,6 @@ const FeeApprover = artifacts.require('FeeApprover');
 contract('fee distributor', accounts => {
   const ganache = new Ganache(web3);
   const [ owner, liquidVault, secondary ] = accounts;
-  const { ZERO_ADDRESS } = constants;
-  const rocketFee = 100; //10%
 
   afterEach('revert', ganache.revert);
 

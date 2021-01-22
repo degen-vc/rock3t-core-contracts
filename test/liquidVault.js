@@ -8,6 +8,7 @@ const RocketToken = artifacts.require('RocketToken');
 const LiquidVault = artifacts.require('LiquidVault');
 const IUniswapV2Pair = artifacts.require('IUniswapV2Pair');
 const FeeApprover = artifacts.require('FeeApprover');
+const SlidingWindowOracle = artifacts.require('SlidingWindowOracle');
 
 
 contract('liquid vault', function(accounts) {
@@ -18,15 +19,16 @@ contract('liquid vault', function(accounts) {
   const assertBNequal = (bnOne, bnTwo) => assert.equal(bnOne.toString(), bnTwo.toString());
 
   const OWNER = accounts[0];
-  const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
   const NOT_OWNER = accounts[1];
-  const nftFund = accounts[9];
   const baseUnit = bn('1000000000000000000');
 
-  const feeReceiver = accounts[8];
   const treasury = accounts[7];
   const startTime = Math.floor(Date.now() / 1000);
 
+  const defaultWindowSize = 14400 // 4 hours
+  const defaultGranularity = 8 // 0.5 hour each
+
+  let uniswapOracle;
   let uniswapPair;
   let uniswapFactory;
   let uniswapRouter;
@@ -48,6 +50,7 @@ contract('liquid vault', function(accounts) {
     feeDistributor = await FeeDistributor.new();
     rocketToken = await RocketToken.new(feeDistributor.address, feeApprover.address, uniswapRouter.address, uniswapFactory.address);
     liquidVault = await LiquidVault.new();
+    uniswapOracle = await SlidingWindowOracle.new(uniswapFactory.address, defaultWindowSize, defaultGranularity);
 
     await rocketToken.createUniswapPair();
     uniswapPair = await rocketToken.tokenUniswapPair();
@@ -64,7 +67,7 @@ contract('liquid vault', function(accounts) {
       uniswapRouter.address,
       uniswapPair,
       treasury,
-      NOT_OWNER
+      uniswapOracle.address
     );
 
     await ganache.snapshot();
@@ -142,43 +145,6 @@ contract('liquid vault', function(accounts) {
         assertBNequal(reservesAfter[0], liquidityEtherAmount);
         assertBNequal(reservesAfter[1], liquidityTokensAmount);
       }
-    });
-    
-    it.skip('should be possible get CurrentTokenPrice', async () => {
-      const liquidityTokensAmount = bn('10000').mul(baseUnit); // 10.000 tokens
-      const liquidityEtherAmount = bn('5').mul(baseUnit); // 5 ETH
-
-      const pair = await IUniswapV2Pair.at(uniswapPair);
-
-      const reservesBefore = await pair.getReserves();
-      assertBNequal(reservesBefore[0], 0);
-      assertBNequal(reservesBefore[1], 0);
-
-      await rocketToken.approve(uniswapRouter.address, liquidityTokensAmount);
-      await uniswapRouter.addLiquidityETH(
-        rocketToken.address,
-        liquidityTokensAmount,
-        0,
-        0,
-        OWNER,
-        new Date().getTime() + 3000,
-        {value: liquidityEtherAmount}
-      );
-
-      const res = await liquidVault.getCurrentTokenPrice();
-      console.log(res.toString());
-
-      const amount = bn('890000').mul(baseUnit);
-      await rocketToken.transfer(liquidVault.address, amount);
-
-
-      console.log((await web3.eth.getBalance(liquidVault.address)).toString());
-      await liquidVault.purchaseLP({ value: '1000' });
-
-      const ress = await liquidVault.getCurrentTokenPrice();
-      console.log(ress.toString());
-      
-      console.log((await web3.eth.getBalance(liquidVault.address)).toString());
     });
 
     it('should be possible to swapExactETHForTokens directly', async () => {
@@ -322,8 +288,7 @@ contract('liquid vault', function(accounts) {
       );
     });
 
-    //TODO: cover lock percentage formula
-    it.skip('should be possible to claim LP after the purchase', async () => {
+    it('should be possible to claim LP after the purchase', async () => {
       const liquidityTokensAmount = bn('1000').mul(baseUnit); // 10.000 tokens
       const liquidityEtherAmount = bn('10').mul(baseUnit); // 5 ETH
 
@@ -352,14 +317,17 @@ contract('liquid vault', function(accounts) {
       
       await ganache.setTime(startTime);
       const result = await liquidVault.purchaseLP({ value: '10000' });
-
-      const lockTime1 = await liquidVault.getLockedPeriod.call();
       
       assert.equal(result.logs.length, 1);
+
+      await uniswapOracle.update(weth.address, rocketToken.address);
 
       const lpBalanceBefore = await pair.balanceOf(OWNER);
       const claimTime = bn(startTime).add(bn(lockTime)).add(bn(1)).toString();
       await ganache.setTime(claimTime);
+      await uniswapOracle.update(weth.address, rocketToken.address);
+      const oracleUpdateTimestamp = Number(claimTime) + 7 * 1800;
+      await ganache.setTime(oracleUpdateTimestamp);
 
       const lockedLPLength = await liquidVault.lockedLPLength(OWNER);
       assertBNequal(lockedLPLength, 1);
@@ -367,17 +335,19 @@ contract('liquid vault', function(accounts) {
       const lockedLP = await liquidVault.getLockedLP(OWNER, 0);
       const claim = await liquidVault.claimLP();
 
-      const expectedLockPeriod = await liquidVault.getLockedPeriod();
       const lpBalanceAfter = await pair.balanceOf(OWNER);
       const lockedLPLengthAfter = await liquidVault.lockedLPLength(OWNER);
 
       const holder = lockedLP[0];
       const amountToClaim = lockedLP[1];
-      const expectedFee = Math.floor((amountToClaim * blackHoleFee) / 1000);
+      const expectedLockPercentage = 2;
+      const lockPercentage = await liquidVault.lockPercentageUINT();
+      const expectedFee = Math.floor((amountToClaim * expectedLockPercentage) / 100);
       const expectedBalance = amountToClaim - expectedFee;
       const actualFee = claim.logs[0].args[3];
 
       assert.equal(holder, OWNER);
+      assertBNequal(expectedLockPercentage.toString(), lockPercentage);
       assertBNequal(lockedLPLengthAfter, 0);
       assertBNequal(amountToClaim, claim.logs[0].args[1]);
       assertBNequal(expectedFee, actualFee);

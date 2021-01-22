@@ -12,12 +12,10 @@ contract('fee approver', function(accounts) {
   const bn = (input) => web3.utils.toBN(input);
   const assertBNequal = (bnOne, bnTwo) => assert.equal(bnOne.toString(), bnTwo.toString());
 
-  const OWNER = accounts[0];
   const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
   const NOT_OWNER = accounts[1];
   const PAIR_FAKE = accounts[2];
   const LIQUID_VAULT_FAKE = accounts[2];
-  const baseUnit = bn('1000000000000000000');
 
   let feeApprover;
 

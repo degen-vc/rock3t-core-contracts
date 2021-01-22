@@ -16,13 +16,13 @@ import './SlidingWindowOracle.sol';
 contract LiquidVault is Ownable {
     using SafeMath for uint256;
 
-    liquidVaultConfig public config;
+    LiquidVaultConfig public config;
     BuyPressureVariables public calibration;
     LockPercentageVariables public lockPercentageCalibration;
 
     uint public globalLPLockTime;
     address public treasury;
-    mapping(address => LPbatch[]) public LockedLP;
+    mapping(address => LPbatch[]) public lockedLP;
 
     bool private unlocked;
 
@@ -32,7 +32,7 @@ contract LiquidVault is Ownable {
         uint256 timestamp;
     }
 
-    struct liquidVaultConfig {
+    struct LiquidVaultConfig {
         address R3T;
         IUniswapV2Router02 uniswapRouter;
         IUniswapV2Pair tokenPair;
@@ -173,7 +173,7 @@ contract LiquidVault is Ownable {
         address tokenPairAddress = address(config.tokenPair);
         IWETH(config.weth).transfer(tokenPairAddress, VARS.netEth);
         IERC20(config.R3T).transfer(tokenPairAddress, r3tRequired);
-
+        config.uniswapOracle.update(config.weth, config.R3T);
 
         uint256 liquidityCreated = config.tokenPair.mint(config.self);
 
@@ -190,7 +190,7 @@ contract LiquidVault is Ownable {
             );
         }
 
-        LockedLP[beneficiary].push(
+        lockedLP[beneficiary].push(
             LPbatch({
                 holder: beneficiary,
                 amount: liquidityCreated,
@@ -215,14 +215,14 @@ contract LiquidVault is Ownable {
 
     //pops latest LP if older than period
     function claimLP() public updateLockTime returns (bool)  {
-        uint256 length = LockedLP[msg.sender].length;
+        uint256 length = lockedLP[msg.sender].length;
         require(length > 0, "R3T: No locked LP.");
-        LPbatch memory batch = LockedLP[msg.sender][length - 1];
+        LPbatch memory batch = lockedLP[msg.sender][length - 1];
         require(
             block.timestamp - batch.timestamp > globalLPLockTime,
             "R3T: LP still locked."
         );
-        LockedLP[msg.sender].pop();
+        lockedLP[msg.sender].pop();
         uint blackHoleShare = lockPercentageUINT();
         uint blackholeDonation = (blackHoleShare * batch.amount).div(100);
         emit LPClaimed(msg.sender, batch.amount, block.timestamp, blackholeDonation, globalLPLockTime);
@@ -231,7 +231,7 @@ contract LiquidVault is Ownable {
     }
 
     function lockedLPLength(address holder) public view returns (uint256) {
-        return LockedLP[holder].length;
+        return lockedLP[holder].length;
     }
 
     function getLockedLP(address holder, uint256 position)
@@ -243,7 +243,7 @@ contract LiquidVault is Ownable {
             uint256
         )
     {
-        LPbatch memory batch = LockedLP[holder][position];
+        LPbatch memory batch = lockedLP[holder][position];
         return (batch.holder, batch.amount, batch.timestamp);
     }
 

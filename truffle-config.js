@@ -36,7 +36,8 @@ module.exports = {
     mainnet: {
       provider: () => new HDWalletProvider(PRIVATE_KEY_PROD, `https://mainnet.infura.io/v3/${INFURA_TOKEN}`),
       network_id: 1,
-      gas: '12100000',
+      gas: '5000000',
+      gasPrice: '101000000000',
       confirmations: 1,
       timeoutBlocks: 1,
       skipDryRun: true     // Skip dry run before migrations? (default: false for public nets )

@@ -17,20 +17,13 @@ contract('liquid vault', function(accounts) {
   const assertBNequal = (bnOne, bnTwo) => assert.equal(bnOne.toString(), bnTwo.toString());
 
   const OWNER = accounts[0];
-  const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
   const NOT_OWNER = accounts[1];
-  const nftFund = accounts[9];
   const baseUnit = bn('1000000000000000000');
-
-  const feeReceiver = accounts[8];
   const treasury = accounts[7];
-  const startTime = Math.floor(Date.now() / 1000);
-  const ONE_DAY = 86400;
 
   let uniswapPair;
   let uniswapFactory;
   let uniswapRouter;
-  let weth;
 
   let feeDistributor;
   let feeApprover;

@@ -17,7 +17,6 @@ contract('uniswap oracle', function(accounts) {
   const OWNER = accounts[0];
   const liquidVault = accounts[1];
   const baseUnit = bn('1000000000000000000');
-  const startTime = Math.floor(Date.now() / 1000);
 
   const defaultWindowSize = 86400 // 24 hours
   const defaultGranularity = 24 // 1 hour each
