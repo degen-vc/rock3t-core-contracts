@@ -28,6 +28,7 @@ contract('liquid vault buy pressure', function(accounts) {
   let uniswapPair;
   let uniswapFactory;
   let uniswapRouter;
+  let weth;
 
   let feeDistributor;
   let rocketToken;
