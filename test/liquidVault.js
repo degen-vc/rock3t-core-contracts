@@ -79,7 +79,6 @@ contract('liquid vault', function(accounts) {
       assert.equal(config.tokenPair, uniswapPair);
       assert.equal(config.uniswapRouter, uniswapRouter.address);
       assert.equal(config.weth, weth.address);
-      assert.equal(config.self, liquidVault.address);
       assert.equal(treasury, treasury);
     });
 
