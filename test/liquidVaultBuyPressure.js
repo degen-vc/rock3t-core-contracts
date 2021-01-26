@@ -8,7 +8,7 @@ const RocketToken = artifacts.require('RocketToken');
 const LiquidVault = artifacts.require('LiquidVault');
 const IUniswapV2Pair = artifacts.require('IUniswapV2Pair');
 const FeeApprover = artifacts.require('FeeApprover');
-const SlidingWindowOracle = artifacts.require('SlidingWindowOracle');
+const PriceOracle = artifacts.require('PriceOracle');
 
 
 contract('liquid vault buy pressure', function(accounts) {
@@ -24,13 +24,11 @@ contract('liquid vault buy pressure', function(accounts) {
 
   const treasury = accounts[7];
 
-  const defaultWindowSize = 14400 // 4 hours
-  const defaultGranularity = 8 // 0.5 hour each
-
   let uniswapOracle;
   let uniswapPair;
   let uniswapFactory;
   let uniswapRouter;
+  let weth;
 
   let feeDistributor;
   let rocketToken;
@@ -41,19 +39,20 @@ contract('liquid vault buy pressure', function(accounts) {
     const contracts = await deployUniswap(accounts);
     uniswapFactory = contracts.uniswapFactory;
     uniswapRouter = contracts.uniswapRouter;
+    weth = contracts.weth;
 
     // deploy and setup main contracts
     feeApprover = await FeeApprover.new();
     feeDistributor = await FeeDistributor.new();
     rocketToken = await RocketToken.new(feeDistributor.address, feeApprover.address, uniswapRouter.address, uniswapFactory.address);
     liquidVault = await LiquidVault.new();
-    uniswapOracle = await SlidingWindowOracle.new(uniswapFactory.address, defaultWindowSize, defaultGranularity);
 
     await rocketToken.createUniswapPair();
     uniswapPair = await rocketToken.tokenUniswapPair();
+    uniswapOracle = await PriceOracle.new(uniswapPair, rocketToken.address, weth.address);
+
     await feeApprover.initialize(uniswapPair, liquidVault.address);
     await feeApprover.unPause();
-
 
     await feeDistributor.seed(rocketToken.address, liquidVault.address, OWNER, 0);
 

@@ -11,7 +11,7 @@ import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 import '@uniswap/v2-periphery/contracts/libraries/UniswapV2OracleLibrary.sol';
 import './UniswapV2Library.sol';
 import 'abdk-libraries-solidity/ABDKMathQuad.sol';
-import './SlidingWindowOracle.sol';
+import './PriceOracle.sol';
 
 contract LiquidVault is Ownable {
     using SafeMath for uint256;
@@ -37,7 +37,7 @@ contract LiquidVault is Ownable {
         IUniswapV2Router02 uniswapRouter;
         IUniswapV2Pair tokenPair;
         FeeDistributorLike feeDistributor;
-        SlidingWindowOracle uniswapOracle;
+        PriceOracle uniswapOracle;
         address self;
         address weth;
     }
@@ -129,7 +129,12 @@ contract LiquidVault is Ownable {
         config.weth = config.uniswapRouter.WETH();
         config.self = address(this);
         treasury = _treasury;
-        config.uniswapOracle = SlidingWindowOracle(_uniswapOracle);
+        config.uniswapOracle = PriceOracle(_uniswapOracle);
+    }
+
+    function setOracleAddress(address _uniswapOracle) external onlyOwner {
+        require(_uniswapOracle != address(0));
+        config.uniswapOracle = PriceOracle(_uniswapOracle);
     }
 
     function getLockedPeriod() external view returns (uint256) {
@@ -173,7 +178,7 @@ contract LiquidVault is Ownable {
         address tokenPairAddress = address(config.tokenPair);
         IWETH(config.weth).transfer(tokenPairAddress, VARS.netEth);
         IERC20(config.R3T).transfer(tokenPairAddress, r3tRequired);
-        config.uniswapOracle.update(config.weth, config.R3T);
+        config.uniswapOracle.update();
 
         uint256 liquidityCreated = config.tokenPair.mint(config.self);
 
@@ -320,11 +325,11 @@ contract LiquidVault is Ownable {
         return ABDKMathQuad.toUInt(fee());
     }
 
-    function _calculateLockPercentage(uint amount) internal view returns (bytes16) {
+    function _calculateLockPercentage() internal view returns (bytes16) {
         //d = d_max*(1/(b.p+1));
         bytes16 ONE = ABDKMathQuad.fromUInt(uint(1));
         bytes16 price = ABDKMathQuad.div(
-            ABDKMathQuad.fromUInt(config.uniswapOracle.consult(config.R3T, amount, config.weth)),
+            ABDKMathQuad.fromUInt(config.uniswapOracle.consult()),
             0x403abc16d674ec800000000000000000 // 1e18
         );
         bytes16 denominator = ABDKMathQuad.add(ONE, ABDKMathQuad.mul(lockPercentageCalibration.beta, price));
@@ -333,7 +338,6 @@ contract LiquidVault is Ownable {
     }
 
     function lockPercentageUINT() public view returns (uint) {
-        uint amount = 1e18;
-        return ABDKMathQuad.toUInt(_calculateLockPercentage(amount));
+        return ABDKMathQuad.toUInt(_calculateLockPercentage());
     }
 }
