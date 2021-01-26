@@ -345,11 +345,10 @@ contract('liquid vault', function(accounts) {
 
       assert.equal(holder, OWNER);
       assertBNequal(expectedLockPercentage.toString(), lockPercentage);
-      assertBNequal(lockedLPLengthAfter, 0);
+      assertBNequal(lockedLPLengthAfter, 1);
       assertBNequal(amountToClaim, claim.logs[0].args[1]);
       assertBNequal(expectedFee, actualFee);
       assertBNequal(expectedBalance, bn(lpBalanceAfter).sub(bn(lpBalanceBefore)));
-
     });
   });
 });
