@@ -4,7 +4,7 @@ const { expectEvent, expectRevert, constants } = require("@openzeppelin/test-hel
 
 const RocketToken = artifacts.require('RocketToken');
 const IUniswapV2Pair = artifacts.require('IUniswapV2Pair');
-const SlidingWindowOracle = artifacts.require('SlidingWindowOracle');
+const PriceOracle = artifacts.require('PriceOracle');
 const FeeApprover = artifacts.require('FeeApprover');
 
 contract('uniswap oracle', function(accounts) {
@@ -17,9 +17,6 @@ contract('uniswap oracle', function(accounts) {
   const OWNER = accounts[0];
   const liquidVault = accounts[1];
   const baseUnit = bn('1000000000000000000');
-
-  const defaultWindowSize = 86400 // 24 hours
-  const defaultGranularity = 24 // 1 hour each
 
   const feeReceiver = accounts[8];
 
@@ -41,10 +38,11 @@ contract('uniswap oracle', function(accounts) {
     // deploy and setup main contracts
     feeApprover = await FeeApprover.new();
     rocketToken = await RocketToken.new(feeReceiver, feeApprover.address, uniswapRouter.address, uniswapFactory.address);
-    uniswapOracle = await SlidingWindowOracle.new(uniswapFactory.address, defaultWindowSize, defaultGranularity);
 
     await rocketToken.createUniswapPair();
     uniswapPair = await rocketToken.tokenUniswapPair();
+
+    uniswapOracle = await PriceOracle.new(uniswapPair, rocketToken.address, weth.address);
 
     await feeApprover.initialize(uniswapPair, liquidVault);
     await feeApprover.unPause();
@@ -71,17 +69,18 @@ contract('uniswap oracle', function(accounts) {
       const pair = await IUniswapV2Pair.at(uniswapPair);
       const previousBlockTimestamp = (await pair.getReserves())[2]
       
-      await uniswapOracle.update(weth.address, rocketToken.address)
+      await uniswapOracle.update()
 
-      const blockTimestamp = Number(previousBlockTimestamp) + 23 * 3600
+      const blockTimestamp = Number(previousBlockTimestamp) + 7 * 1800;
       await ganache.setTime(blockTimestamp.toString());
 
-      await uniswapOracle.update(weth.address, rocketToken.address);
+      await uniswapOracle.update();
     });
 
     it('updates & consults R3T price', async () => {
-      const price = await uniswapOracle.consult(rocketToken.address, bn('100'), weth.address);
-      assertBNequal(price, bn('50'));
+      const price = await uniswapOracle.consult();
+      
+      assertBNequal(price, bn('500000000000000000'));
     })
   });
 });

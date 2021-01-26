@@ -5,18 +5,18 @@ const FeeDistributor = artifacts.require('FeeDistributor');
 const RocketToken = artifacts.require('RocketToken');
 const LiquidVault = artifacts.require('LiquidVault');
 const SlidingWindowOracle = artifacts.require('SlidingWindowOracle');
+const PriceOracle = artifacts.require('PriceOracle');
 
 const { 
     UNISWAP_FACTORY, 
     UNISWAP_ROUTER,
     TREASURY,
     FEE_RECEIVER,
-    SECONDARY_ADDRESS_SHARE
+    SECONDARY_ADDRESS_SHARE,
+    WETH_KOVAN
 } = process.env;
 
 module.exports = async function (deployer, network, accounts) {
-    const defaultWindowSize = 86400 // 24 hours
-    const defaultGranularity = 24 // 1 hour each
 
     if (network === 'development') {
         return;
@@ -38,16 +38,16 @@ module.exports = async function (deployer, network, accounts) {
     const liquidVaultInstance = await LiquidVault.deployed();
     await pausePromise('Liquidity Vault');
 
-    await deployer.deploy(SlidingWindowOracle, UNISWAP_FACTORY, defaultWindowSize, defaultGranularity);
-    const uniswapOracle = await SlidingWindowOracle.deployed();
-    
-    let uniswapPair = await rocketTokenInstance.tokenUniswapPair();
+    let uniswapPair;
+    let uniswapOracle;
 
     await pausePromise('seed fee approver');
     // create uniswap pair manually on production and initialize/unpause fee approver
     if (network !== 'mainnet') {
         await rocketTokenInstance.createUniswapPair();
         uniswapPair = await rocketTokenInstance.tokenUniswapPair();
+
+        uniswapOracle = await deployer.deploy(PriceOracle, uniswapPair, rocketTokenInstance.address, WETH_KOVAN);
 
         await feeApproverInstance.initialize(uniswapPair, liquidVaultInstance.address);
         await feeApproverInstance.unPause();

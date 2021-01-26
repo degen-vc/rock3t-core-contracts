@@ -5,8 +5,8 @@ const FeeDistributor = artifacts.require('FeeDistributor');
 const RocketToken = artifacts.require('RocketToken');
 const LiquidVault = artifacts.require('LiquidVault');
 const IUniswapV2Pair = artifacts.require('IUniswapV2Pair');
-const SlidingWindowOracle = artifacts.require('SlidingWindowOracle');
 const FeeApprover = artifacts.require('FeeApprover');
+const PriceOracle = artifacts.require('PriceOracle');
 
 contract('liquid vault', function(accounts) {
   const ganache = new Ganache(web3);
@@ -19,9 +19,6 @@ contract('liquid vault', function(accounts) {
   const baseUnit = bn('1000000000000000000');
 
   const treasury = accounts[7];
-
-  const defaultWindowSize = 86400 // 24 hours
-  const defaultGranularity = 24 // 1 hour each
 
   let uniswapPair;
   let uniswapFactory;
@@ -44,10 +41,10 @@ contract('liquid vault', function(accounts) {
     feeDistributor = await FeeDistributor.new();
     rocketToken = await RocketToken.new(feeDistributor.address, feeApprover.address, uniswapRouter.address, uniswapFactory.address);
     liquidVault = await LiquidVault.new();
-    uniswapOracle = await SlidingWindowOracle.new(uniswapFactory.address, defaultWindowSize, defaultGranularity);
 
     await rocketToken.createUniswapPair();
     uniswapPair = await rocketToken.tokenUniswapPair();
+    uniswapOracle = await PriceOracle.new(uniswapPair, rocketToken.address, weth.address);
 
     await feeApprover.initialize(uniswapPair, liquidVault.address);
     await feeApprover.unPause();
@@ -86,12 +83,12 @@ contract('liquid vault', function(accounts) {
       const pair = await IUniswapV2Pair.at(uniswapPair);
       const previousBlockTimestamp = (await pair.getReserves())[2]
       
-      await uniswapOracle.update(weth.address, rocketToken.address)
+      await uniswapOracle.update();
 
       const blockTimestamp = Number(previousBlockTimestamp) + 23 * 3600
       await ganache.setTime(blockTimestamp.toString());
 
-      await uniswapOracle.update(weth.address, rocketToken.address);
+      await uniswapOracle.update();
     });
 
     it('calculates lock percentage', async () => { 

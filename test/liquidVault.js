@@ -8,7 +8,7 @@ const RocketToken = artifacts.require('RocketToken');
 const LiquidVault = artifacts.require('LiquidVault');
 const IUniswapV2Pair = artifacts.require('IUniswapV2Pair');
 const FeeApprover = artifacts.require('FeeApprover');
-const SlidingWindowOracle = artifacts.require('SlidingWindowOracle');
+const PriceOracle = artifacts.require('PriceOracle');
 
 
 contract('liquid vault', function(accounts) {
@@ -21,12 +21,9 @@ contract('liquid vault', function(accounts) {
   const OWNER = accounts[0];
   const NOT_OWNER = accounts[1];
   const baseUnit = bn('1000000000000000000');
-
-  const treasury = accounts[7];
   const startTime = Math.floor(Date.now() / 1000);
 
-  const defaultWindowSize = 14400 // 4 hours
-  const defaultGranularity = 8 // 0.5 hour each
+  const treasury = accounts[7];
 
   let uniswapOracle;
   let uniswapPair;
@@ -50,10 +47,10 @@ contract('liquid vault', function(accounts) {
     feeDistributor = await FeeDistributor.new();
     rocketToken = await RocketToken.new(feeDistributor.address, feeApprover.address, uniswapRouter.address, uniswapFactory.address);
     liquidVault = await LiquidVault.new();
-    uniswapOracle = await SlidingWindowOracle.new(uniswapFactory.address, defaultWindowSize, defaultGranularity);
 
     await rocketToken.createUniswapPair();
     uniswapPair = await rocketToken.tokenUniswapPair();
+    uniswapOracle = await PriceOracle.new(uniswapPair, rocketToken.address, weth.address);
 
     await feeApprover.initialize(uniswapPair, liquidVault.address);
     await feeApprover.unPause();
@@ -320,12 +317,12 @@ contract('liquid vault', function(accounts) {
       
       assert.equal(result.logs.length, 1);
 
-      await uniswapOracle.update(weth.address, rocketToken.address);
+      await uniswapOracle.update();
 
       const lpBalanceBefore = await pair.balanceOf(OWNER);
       const claimTime = bn(startTime).add(bn(lockTime)).add(bn(1)).toString();
       await ganache.setTime(claimTime);
-      await uniswapOracle.update(weth.address, rocketToken.address);
+      await uniswapOracle.update();
       const oracleUpdateTimestamp = Number(claimTime) + 7 * 1800;
       await ganache.setTime(oracleUpdateTimestamp);
 
