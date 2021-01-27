@@ -79,7 +79,6 @@ contract('liquid vault', function(accounts) {
       assert.equal(config.tokenPair, uniswapPair);
       assert.equal(config.uniswapRouter, uniswapRouter.address);
       assert.equal(config.weth, weth.address);
-      assert.equal(config.self, liquidVault.address);
       assert.equal(treasury, treasury);
     });
 
@@ -342,9 +341,9 @@ contract('liquid vault', function(accounts) {
 
       const holder = lockedLP[0];
       const amountToClaim = lockedLP[1];
-      const expectedLockPercentage = 2;
+      const expectedLockPercentage = 20;
       const lockPercentage = await liquidVault.lockPercentageUINT();
-      const expectedFee = Math.floor((amountToClaim * expectedLockPercentage) / 100);
+      const expectedFee = Math.floor((amountToClaim * expectedLockPercentage) / 1000);
       const expectedBalance = amountToClaim - expectedFee;
       const actualFee = claim.logs[0].args[3];
 
