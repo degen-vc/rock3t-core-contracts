@@ -26,6 +26,18 @@ contract LiquidVault is Ownable {
 
     bool private locked;
 
+    // Lock period constants
+    bytes16 internal constant LMAX_LMIN = 0x4015d556000000000000000000000000; // Lmax - Lmin
+    bytes16 internal constant BETA = 0xc03c4a074c14c4eb3800000000000000; // // -beta = -2.97263250118e18
+    bytes16 internal constant LMIN = 0x400f5180000000000000000000000000; // Lmin
+
+    // Buy pressure constants
+    bytes16 internal constant MAX_FEE = 0x40044000000000000000000000000000; // 40%
+
+    // Lock percentage constants
+    bytes16 internal constant ONE_BYTES = 0x3fff0000000000000000000000000000; // 1
+    bytes16 internal constant ONE_TOKEN_BYTES = 0x403abc16d674ec800000000000000000; // 1e18
+
     struct LPbatch {
         address holder;
         uint amount;
@@ -57,8 +69,8 @@ contract LiquidVault is Ownable {
     }
 
     struct LockPercentageVariables {
-        bytes16 d_max; //maximum lock percentage
-        bytes16 P0; //normal price
+        bytes16 dMax; //maximum lock percentage
+        bytes16 p0; //normal price
         bytes16 d0; //normal permanent lock percentage
         bytes16 beta; //Calibration coefficient
     }
@@ -93,7 +105,7 @@ contract LiquidVault is Ownable {
         );
 
         calibrateLockPercentage(
-            0x40014000000000000000000000000000, // d_max =  5
+            0x40014000000000000000000000000000, // dMax =  5
             0x3ff7cac083126e978d4fdf3b645a1cac, // p0 = 7e-3
             0x40004000000000000000000000000000, // d0 = 2.5
             0x40061db6db6db5a1484ad8a787aa1421 // beta = 142.857142857
@@ -184,7 +196,7 @@ contract LiquidVault is Ownable {
                 0,
                 path,
                 address(this),
-                7258118400
+                block.timestamp
             );
         }
 
@@ -208,7 +220,7 @@ contract LiquidVault is Ownable {
 
     //send eth to match with HCORE tokens in LiquidVault
     function purchaseLP() public payable {
-        this.purchaseLPFor{value: msg.value}(msg.sender);
+        purchaseLPFor(msg.sender);
     }
 
     //pops latest LP if older than period
@@ -223,10 +235,10 @@ contract LiquidVault is Ownable {
         );
         lockedLP[msg.sender].pop();
         uint blackHoleShare = lockPercentageUINT();
-        uint blackholeDonation = (blackHoleShare * batch.amount).div(100);
+        uint blackholeDonation = blackHoleShare.mul(batch.amount).div(1000);
         emit LPClaimed(msg.sender, batch.amount, block.timestamp, blackholeDonation, globalLPLockTime);
-        config.tokenPair.transfer(address(0), blackholeDonation);
-        return config.tokenPair.transfer(batch.holder, batch.amount-blackholeDonation);
+        require(config.tokenPair.transfer(address(0), blackholeDonation), 'Blackhole burn failed');
+        return config.tokenPair.transfer(batch.holder, batch.amount.sub(blackholeDonation));
     }
 
     function lockedLPLength(address holder) public view returns (uint) {
@@ -259,52 +271,52 @@ contract LiquidVault is Ownable {
         return ABDKMathQuad.toUInt(
             ABDKMathQuad.add(
                 ABDKMathQuad.mul(
-                    0x4015d556000000000000000000000000, // Lmax - Lmin
+                    LMAX_LMIN, // Lmax - Lmin
                     ABDKMathQuad.exp(
                         ABDKMathQuad.div(
                             systemHealth,
-                            0xc03c4a074c14c4eb3800000000000000 // -beta = -2.97263250118e18
+                            BETA // -beta = -2.97263250118e18
                         )
                     )
                 ),
-                0x400f5180000000000000000000000000 // Lmin
+                LMIN // Lmin
             )
         );
     }
 
     function calibrate(bytes16 a, bytes16 b, bytes16 c, bytes16 d, uint maxReserves) public onlyOwner {
-        calibration.a = a;
-        calibration.b = b;
-        calibration.c = c;
-        calibration.d = d;
-        calibration.maxReserves = maxReserves;
+        calibration = BuyPressureVariables({
+            a: a,
+            b: b,
+            c: c,
+            d: d,
+            maxReserves: maxReserves
+        });
     }
 
-    function calibrateLockPercentage(bytes16 d_max, bytes16 P0, bytes16 d0, bytes16 beta) public onlyOwner {
-        lockPercentageCalibration.d_max = d_max;
-        lockPercentageCalibration.P0 = P0;
-        lockPercentageCalibration.d0 = d0;
-        lockPercentageCalibration.beta = beta;
+    function calibrateLockPercentage(bytes16 dMax, bytes16 p0, bytes16 d0, bytes16 beta) public onlyOwner {
+        lockPercentageCalibration = LockPercentageVariables({
+            dMax: dMax,
+            p0: p0,
+            d0: d0,
+            beta: beta
+        });
     }
 
     function square(bytes16 number) internal pure returns (bytes16) {
         return number.mul(number);
     }
 
-    function cube(bytes16 number) internal pure returns (bytes16) {
-        return square(number).mul(number);
-    }
-
     function fee() public view returns (bytes16) {
         uint tokensInUniswapUint = config.R3T.balanceOf(address(config.tokenPair));
 
         if (tokensInUniswapUint >= calibration.maxReserves) {
-            return 0x40044000000000000000000000000000; // 40%
+            return MAX_FEE; // 40%
         }
         bytes16 tokensInUniswap = ABDKMathQuad.fromUInt(tokensInUniswapUint).div(ABDKMathQuad.fromUInt(1e18));
 
         bytes16 t_squared = square(tokensInUniswap);
-        bytes16 t_cubed = cube(tokensInUniswap);
+        bytes16 t_cubed = t_squared.mul(tokensInUniswap);
 
         bytes16 term1 = calibration.a.mul(t_cubed);
         bytes16 term2 = calibration.b.mul(t_squared);
@@ -317,18 +329,17 @@ contract LiquidVault is Ownable {
         return fee().mul(ABDKMathQuad.fromUInt(multiplier)).toUInt();
     }
 
+    // d = dMax*(1/(b.p+1));
     function _calculateLockPercentage() internal view returns (bytes16) {
-        //d = d_max*(1/(b.p+1));
-        bytes16 ONE = ABDKMathQuad.fromUInt(uint(1));
         bytes16 price = ABDKMathQuad.fromUInt(config.uniswapOracle.consult()).div(
-            0x403abc16d674ec800000000000000000 // 1e18
+            ONE_TOKEN_BYTES // 1e18
         );
-        bytes16 denominator = lockPercentageCalibration.beta.mul(price).add(ONE);
-        bytes16 factor = ONE.div(denominator);
-        return lockPercentageCalibration.d_max.mul(factor);
+        bytes16 denominator = lockPercentageCalibration.beta.mul(price).add(ONE_BYTES);
+        return lockPercentageCalibration.dMax.div(denominator);
     }
 
     function lockPercentageUINT() public view returns (uint) {
-        return _calculateLockPercentage().toUInt();
+        uint multiplier = 10;
+        return _calculateLockPercentage().mul(ABDKMathQuad.fromUInt(multiplier)).toUInt();
     }
 }

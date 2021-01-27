@@ -336,9 +336,9 @@ contract('liquid vault', function(accounts) {
 
       const holder = lockedLP[0];
       const amountToClaim = lockedLP[1];
-      const expectedLockPercentage = 2;
+      const expectedLockPercentage = 20;
       const lockPercentage = await liquidVault.lockPercentageUINT();
-      const expectedFee = Math.floor((amountToClaim * expectedLockPercentage) / 100);
+      const expectedFee = Math.floor((amountToClaim * expectedLockPercentage) / 1000);
       const expectedBalance = amountToClaim - expectedFee;
       const actualFee = claim.logs[0].args[3];
 
