@@ -61,7 +61,7 @@ contract('liquid vault', function(accounts) {
       uniswapOracle.address
     );
 
-    const liquidityTokensAmount = bn('678000').mul(baseUnit);
+    const liquidityTokensAmount = bn('578000').mul(baseUnit);
     const liquidityEtherAmount = bn('1000').mul(baseUnit);
 
     await rocketToken.approve(uniswapRouter.address, liquidityTokensAmount);
@@ -93,7 +93,7 @@ contract('liquid vault', function(accounts) {
 
     it('calculates lock percentage', async () => { 
       const result = await liquidVault.lockPercentageUINT();
-      assertBNequal(result, '4');
+      assertBNequal(result, '40');
     });
   });
 });

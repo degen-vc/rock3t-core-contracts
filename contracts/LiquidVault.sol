@@ -1,45 +1,56 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.7.1;
 pragma experimental ABIEncoderV2;
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./facades/FeeDistributorLike.sol";
-import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
-import "@uniswap/v2-periphery/contracts/interfaces/IWETH.sol";
-import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
+import '@openzeppelin/contracts/access/Ownable.sol';
+import '@openzeppelin/contracts/math/SafeMath.sol';
+import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
+import './facades/FeeDistributorLike.sol';
+import '@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol';
+import '@uniswap/v2-periphery/contracts/interfaces/IWETH.sol';
+import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol';
 import '@uniswap/v2-periphery/contracts/libraries/UniswapV2OracleLibrary.sol';
 import './UniswapV2Library.sol';
 import 'abdk-libraries-solidity/ABDKMathQuad.sol';
 import './PriceOracle.sol';
 
 contract LiquidVault is Ownable {
-    using SafeMath for uint256;
+    using SafeMath for uint;
+    using ABDKMathQuad for bytes16;
 
     LiquidVaultConfig public config;
     BuyPressureVariables public calibration;
     LockPercentageVariables public lockPercentageCalibration;
 
-    uint public globalLPLockTime;
     address public treasury;
     mapping(address => LPbatch[]) public lockedLP;
 
-    bool private unlocked;
+    bool private locked;
+
+    // Lock period constants
+    bytes16 internal constant LMAX_LMIN = 0x4015d556000000000000000000000000; // Lmax - Lmin
+    bytes16 internal constant BETA = 0xc03c4a074c14c4eb3800000000000000; // // -beta = -2.97263250118e18
+    bytes16 internal constant LMIN = 0x400f5180000000000000000000000000; // Lmin
+
+    // Buy pressure constants
+    bytes16 internal constant MAX_FEE = 0x40044000000000000000000000000000; // 40%
+
+    // Lock percentage constants
+    bytes16 internal constant ONE_BYTES = 0x3fff0000000000000000000000000000; // 1
+    bytes16 internal constant ONE_TOKEN_BYTES = 0x403abc16d674ec800000000000000000; // 1e18
 
     struct LPbatch {
         address holder;
-        uint256 amount;
-        uint256 timestamp;
+        uint amount;
+        uint timestamp;
     }
 
     struct LiquidVaultConfig {
-        address R3T;
+        IERC20 R3T;
         IUniswapV2Router02 uniswapRouter;
         IUniswapV2Pair tokenPair;
         FeeDistributorLike feeDistributor;
         PriceOracle uniswapOracle;
-        address self;
-        address weth;
+        IWETH weth;
     }
 
     struct PurchaseLPVariables {
@@ -58,8 +69,8 @@ contract LiquidVault is Ownable {
     }
 
     struct LockPercentageVariables {
-        bytes16 d_max; //maximum lock percentage
-        bytes16 P0; //normal price
+        bytes16 dMax; //maximum lock percentage
+        bytes16 p0; //normal price
         bytes16 d0; //normal permanent lock percentage
         bytes16 beta; //Calibration coefficient
     }
@@ -69,17 +80,17 @@ contract LiquidVault is Ownable {
     */
     event LPQueued(
         address holder,
-        uint256 amount,
-        uint256 eth,
-        uint256 r3t,
-        uint256 timeStamp,
+        uint amount,
+        uint eth,
+        uint r3t,
+        uint timeStamp,
         uint lockPeriod
     );
 
     event LPClaimed(
         address holder,
-        uint256 amount,
-        uint256 timestamp,
+        uint amount,
+        uint timestamp,
         uint blackholeDonation,
         uint lockPeriod
     );
@@ -90,108 +101,102 @@ contract LiquidVault is Ownable {
             0x3fde33dcfe54a3802b3e313af8e0e525, // b = 1.4e-10
             0x3ff164840e1719f7f8ca8198f1d3ed52, // c = 8.5e-5
             0x00000000000000000000000000000000, // d = 0
-            500000 // maxReserves
+            500000e18 // maxReserves
         );
 
         calibrateLockPercentage(
-            0x40014000000000000000000000000000, // d_max =  5
+            0x40014000000000000000000000000000, // dMax =  5
             0x3ff7cac083126e978d4fdf3b645a1cac, // p0 = 7e-3
-            0x40004000000000000000000000000000, // d0 = 25e-1
-            0x40061db6db6db5a1484ad8a787aa1421 // beta = 142.857
+            0x40004000000000000000000000000000, // d0 = 2.5
+            0x40061db6db6db5a1484ad8a787aa1421 // beta = 142.857142857
         );
-        unlocked = true;
     }
 
     modifier lock {
-        require(unlocked, "R3T: reentrancy violation");
-        unlocked = false;
+        require(!locked, 'R3T: reentrancy violation');
+        locked = true;
         _;
-        unlocked = true;
-    }
-
-    modifier updateLockTime {
-        globalLPLockTime = _calculateLockPeriod();
-        _;
+        locked = false;
     }
 
     function seed(
-        address r3t,
-        address feeDistributor,
-        address uniswapRouter,
-        address uniswapPair,
+        IERC20 r3t,
+        FeeDistributorLike _feeDistributor,
+        IUniswapV2Router02 _uniswapRouter,
+        IUniswapV2Pair _uniswapPair,
         address _treasury,
-        address _uniswapOracle
+        PriceOracle _uniswapOracle
     ) public onlyOwner {
+        require(address(config.R3T) == address(0), 'Already initiated');
         config.R3T = r3t;
-        config.feeDistributor = FeeDistributorLike(feeDistributor);
-        config.tokenPair = IUniswapV2Pair(uniswapPair);
-        config.uniswapRouter = IUniswapV2Router02(uniswapRouter);
-        config.weth = config.uniswapRouter.WETH();
-        config.self = address(this);
+        config.feeDistributor = _feeDistributor;
+        config.tokenPair = _uniswapPair;
+        config.uniswapRouter = _uniswapRouter;
+        config.weth = IWETH(config.uniswapRouter.WETH());
         treasury = _treasury;
-        config.uniswapOracle = PriceOracle(_uniswapOracle);
+        config.uniswapOracle = _uniswapOracle;
     }
 
-    function setOracleAddress(address _uniswapOracle) external onlyOwner {
-        require(_uniswapOracle != address(0));
-        config.uniswapOracle = PriceOracle(_uniswapOracle);
+    function setOracleAddress(PriceOracle _uniswapOracle) external onlyOwner {
+        require(address(_uniswapOracle) != address(0), 'Zero address not allowed');
+        config.uniswapOracle = _uniswapOracle;
     }
 
-    function getLockedPeriod() external view returns (uint256) {
+    function getLockedPeriod() external view returns (uint) {
         return _calculateLockPeriod();
     }
 
     function flushToTreasury(uint amount) public onlyOwner {
-        require(treasury != address(0),"R3T: treasury not set");
-        IERC20(config.R3T).transfer(treasury, amount);
+        require(treasury != address(0),'R3T: treasury not set');
+        require(config.R3T.transfer(treasury, amount), 'Treasury transfer failed');
     }
 
-    function purchaseLPFor(address beneficiary) public payable lock updateLockTime {
+    function purchaseLPFor(address beneficiary) public payable lock {
+        require(msg.value > 0, 'R3T: eth required to mint R3T LP');
         config.feeDistributor.distributeFees();
-        require(msg.value > 0, "R3T: eth required to mint R3T LP");
-        PurchaseLPVariables memory VARS;
+        PurchaseLPVariables memory vars;
         uint ethFeePercentage = feeUINT();
-        VARS.ethFee = msg.value.mul(ethFeePercentage).div(100);
-        VARS.netEth = msg.value.sub(VARS.ethFee);
+        vars.ethFee = msg.value.mul(ethFeePercentage).div(1000);
+        vars.netEth = msg.value.sub(vars.ethFee);
 
-        (address token0, ) = config.R3T < config.weth
-            ? (config.R3T, config.weth)
-            : (config.weth, config.R3T);
-             uint256 r3tRequired = 0;
+        (vars.reserve1, vars.reserve2, ) = config.tokenPair.getReserves();
 
-            (VARS.reserve1,VARS.reserve2, ) = config.tokenPair.getReserves();
+        uint r3tRequired;
+        if (address(config.R3T) < address(config.weth)) {
+            r3tRequired = config.uniswapRouter.quote(
+                vars.netEth,
+                vars.reserve2,
+                vars.reserve1
+            );
+        } else {
+            r3tRequired = config.uniswapRouter.quote(
+                vars.netEth,
+                vars.reserve1,
+                vars.reserve2
+            );
+        }
 
-            if (token0 == config.R3T) {
-                r3tRequired = config.uniswapRouter.quote(
-                    VARS.netEth,
-                    VARS.reserve2,
-                    VARS.reserve1
-                );
-            } else {
-                r3tRequired = config.uniswapRouter.quote(VARS.netEth, VARS.reserve1, VARS.reserve2);
-            }
+        uint balance = config.R3T.balanceOf(address(this));
+        require(balance >= r3tRequired, 'R3T: insufficient R3T in LiquidVault');
 
-        uint256 balance = IERC20(config.R3T).balanceOf(config.self);
-        require(balance >= r3tRequired, "R3T: insufficient R3T in LiquidVault");
-
-        IWETH(config.weth).deposit{value: VARS.netEth}();
+        config.weth.deposit{value: vars.netEth}();
         address tokenPairAddress = address(config.tokenPair);
-        IWETH(config.weth).transfer(tokenPairAddress, VARS.netEth);
-        IERC20(config.R3T).transfer(tokenPairAddress, r3tRequired);
+        config.weth.transfer(tokenPairAddress, vars.netEth);
+        config.R3T.transfer(tokenPairAddress, r3tRequired);
         config.uniswapOracle.update();
 
-        uint256 liquidityCreated = config.tokenPair.mint(config.self);
+        uint liquidityCreated = config.tokenPair.mint(address(this));
 
-        if (VARS.ethFee > 0) {
+        if (vars.ethFee > 0) {
             address[] memory path = new address[](2);
-            path[0] = config.weth;
-            path[1] = config.R3T;
+            path[0] = address(config.weth);
+            path[1] = address(config.R3T);
 
-            config.uniswapRouter.swapExactETHForTokens{ value:VARS.ethFee }(
+            config.uniswapRouter.swapExactETHForTokens{ value:vars.ethFee }(
                 0,
                 path,
                 address(this),
-                7258118400
+                block.timestamp
             );
         }
 
@@ -206,46 +211,47 @@ contract LiquidVault is Ownable {
         emit LPQueued(
             beneficiary,
             liquidityCreated,
-            VARS.netEth,
+            vars.netEth,
             r3tRequired,
             block.timestamp,
-            globalLPLockTime
+            _calculateLockPeriod()
         );
     }
 
     //send eth to match with HCORE tokens in LiquidVault
     function purchaseLP() public payable {
-        this.purchaseLPFor{value: msg.value}(msg.sender);
+        purchaseLPFor(msg.sender);
     }
 
     //pops latest LP if older than period
-    function claimLP() public updateLockTime returns (bool)  {
-        uint256 length = lockedLP[msg.sender].length;
-        require(length > 0, "R3T: No locked LP.");
+    function claimLP() public returns (bool)  {
+        uint length = lockedLP[msg.sender].length;
+        require(length > 0, 'R3T: No locked LP.');
         LPbatch memory batch = lockedLP[msg.sender][length - 1];
+        uint globalLPLockTime = _calculateLockPeriod();
         require(
             block.timestamp - batch.timestamp > globalLPLockTime,
-            "R3T: LP still locked."
+            'R3T: LP still locked.'
         );
         lockedLP[msg.sender].pop();
         uint blackHoleShare = lockPercentageUINT();
-        uint blackholeDonation = (blackHoleShare * batch.amount).div(100);
+        uint blackholeDonation = blackHoleShare.mul(batch.amount).div(1000);
         emit LPClaimed(msg.sender, batch.amount, block.timestamp, blackholeDonation, globalLPLockTime);
-        config.tokenPair.transfer(address(0), blackholeDonation);
-        return config.tokenPair.transfer(batch.holder, batch.amount-blackholeDonation);
+        require(config.tokenPair.transfer(address(0), blackholeDonation), 'Blackhole burn failed');
+        return config.tokenPair.transfer(batch.holder, batch.amount.sub(blackholeDonation));
     }
 
-    function lockedLPLength(address holder) public view returns (uint256) {
+    function lockedLPLength(address holder) public view returns (uint) {
         return lockedLP[holder].length;
     }
 
-    function getLockedLP(address holder, uint256 position)
+    function getLockedLP(address holder, uint position)
         public
         view
         returns (
             address,
-            uint256,
-            uint256
+            uint,
+            uint
         )
     {
         LPbatch memory batch = lockedLP[holder][position];
@@ -254,90 +260,86 @@ contract LiquidVault is Ownable {
 
     function _calculateLockPeriod() internal view returns (uint) {
         address factory = address(config.tokenPair.factory());
-        (uint etherAmount, uint tokenAmount) = UniswapV2Library.getReserves(factory, config.weth, config.R3T);
+        (uint etherAmount, uint tokenAmount) = UniswapV2Library.getReserves(factory, address(config.weth), address(config.R3T));
         
-        require(etherAmount != 0 && tokenAmount != 0, "Reserves cannot be zero.");
+        require(etherAmount != 0 && tokenAmount != 0, 'Reserves cannot be zero.');
         
         bytes16 floatEtherAmount = ABDKMathQuad.fromUInt(etherAmount);
         bytes16 floatTokenAmount = ABDKMathQuad.fromUInt(tokenAmount);
-        bytes16 systemHealth = ABDKMathQuad.div(
-            ABDKMathQuad.mul(
-                floatEtherAmount,
-                floatEtherAmount),
-            floatTokenAmount);
+        bytes16 systemHealth = floatEtherAmount.mul(floatEtherAmount).div(floatTokenAmount);
+
         return ABDKMathQuad.toUInt(
             ABDKMathQuad.add(
                 ABDKMathQuad.mul(
-                    0x4015d556000000000000000000000000, // Lmax - Lmin
+                    LMAX_LMIN, // Lmax - Lmin
                     ABDKMathQuad.exp(
                         ABDKMathQuad.div(
                             systemHealth,
-                            0xc03c4a074c14c4eb3800000000000000 // -beta = -2.97263250118e18
+                            BETA // -beta = -2.97263250118e18
                         )
                     )
                 ),
-                0x400f5180000000000000000000000000 // Lmin
+                LMIN // Lmin
             )
         );
     }
 
     function calibrate(bytes16 a, bytes16 b, bytes16 c, bytes16 d, uint maxReserves) public onlyOwner {
-        calibration.a = a;
-        calibration.b = b;
-        calibration.c = c;
-        calibration.d = d;
-        calibration.maxReserves = maxReserves;
+        calibration = BuyPressureVariables({
+            a: a,
+            b: b,
+            c: c,
+            d: d,
+            maxReserves: maxReserves
+        });
     }
 
-    function calibrateLockPercentage(bytes16 d_max, bytes16 P0, bytes16 d0, bytes16 beta) public onlyOwner {
-        lockPercentageCalibration.d_max = d_max;
-        lockPercentageCalibration.P0 = P0;
-        lockPercentageCalibration.d0 = d0;
-        lockPercentageCalibration.beta = beta;
+    function calibrateLockPercentage(bytes16 dMax, bytes16 p0, bytes16 d0, bytes16 beta) public onlyOwner {
+        lockPercentageCalibration = LockPercentageVariables({
+            dMax: dMax,
+            p0: p0,
+            d0: d0,
+            beta: beta
+        });
     }
 
     function square(bytes16 number) internal pure returns (bytes16) {
-        return ABDKMathQuad.mul(number, number);
-    }
-
-    function cube(bytes16 number) internal pure returns (bytes16) {
-        return ABDKMathQuad.mul(square(number), number);
+        return number.mul(number);
     }
 
     function fee() public view returns (bytes16) {
-        uint tokensInUniswapUint = IERC20(config.R3T).balanceOf(address(config.tokenPair)) / 1e18;
+        uint tokensInUniswapUint = config.R3T.balanceOf(address(config.tokenPair));
 
         if (tokensInUniswapUint >= calibration.maxReserves) {
-            return 0x40044000000000000000000000000000; // 40%
+            return MAX_FEE; // 40%
         }
-        bytes16 tokensInUniswap = ABDKMathQuad.fromUInt(tokensInUniswapUint);
+        bytes16 tokensInUniswap = ABDKMathQuad.fromUInt(tokensInUniswapUint).div(ABDKMathQuad.fromUInt(1e18));
 
         bytes16 t_squared = square(tokensInUniswap);
-        bytes16 t_cubed = cube(tokensInUniswap);
+        bytes16 t_cubed = t_squared.mul(tokensInUniswap);
 
-        bytes16 term1 = ABDKMathQuad.mul(calibration.a, t_cubed);
-        bytes16 term2 = ABDKMathQuad.mul(calibration.b, t_squared);
-        bytes16 term3 = ABDKMathQuad.mul(calibration.c, tokensInUniswap);
-        return ABDKMathQuad.add(term1, ABDKMathQuad.add(term2, ABDKMathQuad.add(term3, calibration.d)));
+        bytes16 term1 = calibration.a.mul(t_cubed);
+        bytes16 term2 = calibration.b.mul(t_squared);
+        bytes16 term3 = calibration.c.mul(tokensInUniswap);
+        return term1.add(term2).add(term3).add(calibration.d);
     }
 
     function feeUINT() public view returns (uint) {
-        return ABDKMathQuad.toUInt(fee());
+        uint multiplier = 10;
+        return fee().mul(ABDKMathQuad.fromUInt(multiplier)).toUInt();
     }
 
+    // d = dMax*(1/(b.p+1));
     function _calculateLockPercentage() internal view returns (bytes16) {
-        //d = d_max*(1/(b.p+1));
-        bytes16 ONE = ABDKMathQuad.fromUInt(uint(1));
-        bytes16 price = ABDKMathQuad.div(
-            ABDKMathQuad.fromUInt(config.uniswapOracle.consult()),
-            0x403abc16d674ec800000000000000000 // 1e18
+        bytes16 price = ABDKMathQuad.fromUInt(config.uniswapOracle.consult()).div(
+            ONE_TOKEN_BYTES // 1e18
         );
-        bytes16 denominator = ABDKMathQuad.add(ONE, ABDKMathQuad.mul(lockPercentageCalibration.beta, price));
-        bytes16 factor = ABDKMathQuad.div(ONE, denominator);
-        return ABDKMathQuad.mul(lockPercentageCalibration.d_max, factor);
+        bytes16 denominator = lockPercentageCalibration.beta.mul(price).add(ONE_BYTES);
+        return lockPercentageCalibration.dMax.div(denominator);
     }
 
     function lockPercentageUINT() public view returns (uint) {
-        return ABDKMathQuad.toUInt(_calculateLockPercentage());
+        uint multiplier = 10;
+        return _calculateLockPercentage().mul(ABDKMathQuad.fromUInt(multiplier)).toUInt();
     }
 }

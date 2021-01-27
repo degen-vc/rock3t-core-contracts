@@ -75,7 +75,7 @@ contract('liquid vault buy pressure', function(accounts) {
     assert.equal(calibration.b, '0x3fde33dcfe54a3802b3e313af8e0e525');
     assert.equal(calibration.c, '0x3ff164840e1719f7f8ca8198f1d3ed52');
     assert.equal(calibration.d, '0x00000000000000000000000000000000');
-    assertBNequal(calibration.maxReserves, 500000);
+    assertBNequal(calibration.maxReserves, '500000000000000000000000');
   });
 
   it('should be possible to calibrate buy pressure formula for owner', async () => {
@@ -113,7 +113,7 @@ contract('liquid vault buy pressure', function(accounts) {
     assert.equal(calibration.b, '0x3fde33dcfe54a3802b3e313af8e0e525');
     assert.equal(calibration.c, '0x3ff164840e1719f7f8ca8198f1d3ed52');
     assert.equal(calibration.d, '0x00000000000000000000000000000000');
-    assertBNequal(calibration.maxReserves, 500000);
+    assertBNequal(calibration.maxReserves, '500000000000000000000000');
   });
 
   it('should be possible to get current buy pressure fee amount as 0%', async () => {
@@ -137,7 +137,7 @@ contract('liquid vault buy pressure', function(accounts) {
   });
 
   it('should be possible to get current buy pressure fee amount as 20%', async () => {
-    const liquidityTokensAmount = bn('200000').mul(baseUnit); // 200.000 tokens
+    const liquidityTokensAmount = bn('199000').mul(baseUnit); // 199.000 tokens
     const liquidityEtherAmount = bn('10').mul(baseUnit); // 10 ETH
 
     await rocketToken.approve(uniswapRouter.address, liquidityTokensAmount);
@@ -153,7 +153,7 @@ contract('liquid vault buy pressure', function(accounts) {
     );
 
     const fee = await liquidVault.feeUINT();
-    assertBNequal(fee, 20);
+    assertBNequal(fee, 200);
   });
 
   it('should be possible to get current buy pressure fee amount as max 40%', async () => {
@@ -173,7 +173,7 @@ contract('liquid vault buy pressure', function(accounts) {
     );
 
     const fee = await liquidVault.feeUINT();
-    assertBNequal(fee, 40);
+    assertBNequal(fee, 400);
   });
 
   it('should be possible to get current buy pressure fee amount as max 40% if there are 9mln tokens in pair', async () => {
@@ -193,11 +193,11 @@ contract('liquid vault buy pressure', function(accounts) {
     );
 
     const fee = await liquidVault.feeUINT();
-    assertBNequal(fee, 40);
+    assertBNequal(fee, 400);
   });
 
   it('should be possible to purchaseLP with eth fee 20% and fee swapped on uniswap', async () => {
-    const liquidityTokensAmount = bn('200000').mul(baseUnit); // 200.000 tokens
+    const liquidityTokensAmount = bn('199000').mul(baseUnit); // 199.000 tokens
     const liquidityEtherAmount = bn('10').mul(baseUnit); // 10 ETH
 
     const pair = await IUniswapV2Pair.at(uniswapPair);
