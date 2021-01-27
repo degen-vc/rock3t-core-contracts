@@ -314,8 +314,16 @@ contract('liquid vault', function(accounts) {
       
       await ganache.setTime(startTime);
       const result = await liquidVault.purchaseLP({ value: '10000' });
-      
       assert.equal(result.logs.length, 1);
+
+      const lockedLPLength = await liquidVault.lockedLPLength(OWNER);
+      assertBNequal(lockedLPLength, 1);
+
+      const resultSecondPurchase = await liquidVault.purchaseLP({ value: '20000' });
+      assert.equal(resultSecondPurchase.logs.length, 1);
+
+      const lockedLPLengthSecondPurchase = await liquidVault.lockedLPLength(OWNER);
+      assertBNequal(lockedLPLengthSecondPurchase, 2);
 
       await uniswapOracle.update();
 
@@ -326,14 +334,11 @@ contract('liquid vault', function(accounts) {
       const oracleUpdateTimestamp = Number(claimTime) + 7 * 1800;
       await ganache.setTime(oracleUpdateTimestamp);
 
-      const lockedLPLength = await liquidVault.lockedLPLength(OWNER);
-      assertBNequal(lockedLPLength, 1);
-
       const lockedLP = await liquidVault.getLockedLP(OWNER, 0);
       const claim = await liquidVault.claimLP();
 
       const lpBalanceAfter = await pair.balanceOf(OWNER);
-      const lockedLPLengthAfter = await liquidVault.lockedLPLength(OWNER);
+      const lockedLPLengthAfterClaim = await liquidVault.lockedLPLength(OWNER);
 
       const holder = lockedLP[0];
       const amountToClaim = lockedLP[1];
@@ -345,7 +350,7 @@ contract('liquid vault', function(accounts) {
 
       assert.equal(holder, OWNER);
       assertBNequal(expectedLockPercentage.toString(), lockPercentage);
-      assertBNequal(lockedLPLengthAfter, 1);
+      assertBNequal(lockedLPLengthAfterClaim, lockedLPLengthSecondPurchase);
       assertBNequal(amountToClaim, claim.logs[0].args[1]);
       assertBNequal(expectedFee, actualFee);
       assertBNequal(expectedBalance, bn(lpBalanceAfter).sub(bn(lpBalanceBefore)));
