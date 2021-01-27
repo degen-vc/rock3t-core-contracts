@@ -73,8 +73,6 @@ contract('uniswap oracle', function(accounts) {
 
       const blockTimestamp = Number(previousBlockTimestamp) + 7 * 1800;
       await ganache.setTime(blockTimestamp.toString());
-
-      await uniswapOracle.update();
     });
 
     it('updates & consults R3T price', async () => {

@@ -23,6 +23,7 @@ contract LiquidVault is Ownable {
 
     address public treasury;
     mapping(address => LPbatch[]) public lockedLP;
+    mapping(address => uint256) public queueCounter;
 
     bool private locked;
 
@@ -223,17 +224,20 @@ contract LiquidVault is Ownable {
         purchaseLPFor(msg.sender);
     }
 
-    //pops latest LP if older than period
     function claimLP() public returns (bool)  {
         uint length = lockedLP[msg.sender].length;
         require(length > 0, 'R3T: No locked LP.');
-        LPbatch memory batch = lockedLP[msg.sender][length - 1];
+        uint256 oldest = queueCounter[msg.sender];
+        LPbatch memory batch = lockedLP[msg.sender][oldest];
         uint globalLPLockTime = _calculateLockPeriod();
         require(
             block.timestamp - batch.timestamp > globalLPLockTime,
             'R3T: LP still locked.'
         );
-        lockedLP[msg.sender].pop();
+        oldest = lockedLP[msg.sender].length - 1 == oldest
+            ? oldest
+            : oldest + 1;
+        queueCounter[msg.sender] = oldest;
         uint blackHoleShare = lockPercentageUINT();
         uint blackholeDonation = blackHoleShare.mul(batch.amount).div(1000);
         emit LPClaimed(msg.sender, batch.amount, block.timestamp, blackholeDonation, globalLPLockTime);
