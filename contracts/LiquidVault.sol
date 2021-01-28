@@ -26,6 +26,7 @@ contract LiquidVault is Ownable {
     mapping(address => uint256) public queueCounter;
 
     bool private locked;
+    bool public forceUnlock;
 
     // lock period constants
     bytes16 internal constant LMAX_LMIN = 0x4015d556000000000000000000000000; // Lmax - Lmin
@@ -264,6 +265,9 @@ contract LiquidVault is Ownable {
     }
 
     function _calculateLockPeriod() internal view returns (uint) {
+        if (forceUnlock) {
+            return 0;
+        }
         address factory = address(config.tokenPair.factory());
         (uint etherAmount, uint tokenAmount) = UniswapV2Library.getReserves(factory, address(config.weth), address(config.R3T));
         
@@ -287,6 +291,11 @@ contract LiquidVault is Ownable {
                 LMIN // Lmin
             )
         );
+    }
+
+    // Could not be canceled if activated
+    function enableLPForceUnlock() public onlyOwner {
+        forceUnlock = true;
     }
 
     function calibrate(bytes16 a, bytes16 b, bytes16 c, bytes16 d, uint maxReserves) public onlyOwner {
