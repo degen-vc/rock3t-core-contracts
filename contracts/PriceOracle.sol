@@ -75,7 +75,7 @@ contract PriceOracle {
         }
         uint _priceCumulativeLast = priceCumulativeLast;
         uint _blockTimestampLast = blockTimestampLast;
-        // Most recent price is already calculated.
+        // most recent price is already calculated.
         if (_blockTimestamp == _blockTimestampLast) {
             return priceLast;
         }
