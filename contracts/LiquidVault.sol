@@ -152,7 +152,8 @@ contract LiquidVault is Ownable {
         require(config.R3T.transfer(treasury, amount), 'Treasury transfer failed');
     }
 
-    //splits the amount of ETH according to a buy pressure formula, swaps, and mints LP tokens
+    //splits the amount of ETH according to a buy pressure formula, swaps the splitted fee, 
+    //and pools the remaining ETH with R3T to create LP tokens
     function purchaseLPFor(address beneficiary) public payable lock {
         require(msg.value > 0, 'R3T: eth required to mint R3T LP');
         config.feeDistributor.distributeFees();
