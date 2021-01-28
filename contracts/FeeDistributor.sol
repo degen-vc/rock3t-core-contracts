@@ -33,6 +33,7 @@ contract FeeDistributor is Ownable {
         initialized = true;
     }
 
+    //sends fees to the liquid vault, secondary address and percentage can be configured
     function distributeFees() public seeded {
         uint balance = R3Ttoken.balanceOf(address(this));
         

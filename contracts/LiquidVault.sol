@@ -77,7 +77,7 @@ contract LiquidVault is Ownable {
     }
 
     /*
-        A user can hold multiple locked LP batches. Each batch takes 30 days to incubate
+        A user can hold multiple locked LP batches
     */
     event LPQueued(
         address holder,
@@ -152,6 +152,7 @@ contract LiquidVault is Ownable {
         require(config.R3T.transfer(treasury, amount), 'Treasury transfer failed');
     }
 
+    //splits the amount of ETH according to a buy pressure formula, swaps, and mints LP tokens
     function purchaseLPFor(address beneficiary) public payable lock {
         require(msg.value > 0, 'R3T: eth required to mint R3T LP');
         config.feeDistributor.distributeFees();
@@ -219,11 +220,12 @@ contract LiquidVault is Ownable {
         );
     }
 
-    //send eth to match with HCORE tokens in LiquidVault
+    //send eth to match with R3T tokens in LiquidVault
     function purchaseLP() public payable {
         purchaseLPFor(msg.sender);
     }
 
+    //claimps the oldest LP batch according to the lock period formula
     function claimLP() public returns (bool)  {
         uint length = lockedLP[msg.sender].length;
         require(length > 0, 'R3T: No locked LP.');

@@ -80,6 +80,7 @@ contract('liquid vault', function(accounts) {
       assert.equal(config.uniswapRouter, uniswapRouter.address);
       assert.equal(config.weth, weth.address);
       assert.equal(treasury, treasury);
+      assert.equal(config.uniswapOracle, uniswapOracle.address);
     });
 
     it('should be possible to flush to treasury from owner', async () => {
