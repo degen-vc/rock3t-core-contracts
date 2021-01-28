@@ -90,9 +90,6 @@ contract RocketToken is Context, IERC20, Ownable {
     /**
      * @dev See {IERC20-balanceOf}.
      */
-    // function balanceOf(address account) public override returns (uint256) {
-    //     return _balances[account];
-    // }
     function balanceOf(address _owner) public view override returns (uint256) {
         return _balances[_owner];
     }
@@ -312,7 +309,7 @@ contract RocketToken is Context, IERC20, Ownable {
         console.log("Sender is :", sender, "Recipent is :", recipient);
         console.log("amount is ", amount);
 
-        // Addressing a broken checker contract
+        // addressing a broken checker contract
         require(
             transferToAmount.add(transferToFeeDistributorAmount) == amount,
             "R3T: invariant violation on fee calculation."

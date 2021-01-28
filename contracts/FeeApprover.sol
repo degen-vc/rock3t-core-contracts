@@ -9,6 +9,15 @@ import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 contract FeeApprover is Ownable {
     using SafeMath for uint256;
 
+    uint8 public feePercentX100 = 10;
+    bool public paused;
+    bool public initiated;
+
+    mapping(address => uint256) public discountFrom;
+    mapping(address => uint256) public discountTo;
+    mapping(address => uint256) public feeBlackList;
+
+    // called once for initial setup
     function initialize(address _tokenUniswapPair, address _liquidVault) public onlyOwner {
         require(_tokenUniswapPair != address(0) && _liquidVault != address(0), "Zero addresses not allowed");
         require(!initiated, "FeeApprover: already initiated");
@@ -21,14 +30,7 @@ contract FeeApprover is Ownable {
         _setFeeDiscountFrom(_liquidVault, 1000);
     }
 
-    uint8 public feePercentX100 = 10;
-    bool public paused;
-    bool public initiated;
-    mapping(address => uint256) public discountFrom;
-    mapping(address => uint256) public discountTo;
-    mapping(address => uint256) public feeBlackList;
-
-    // Once R3T is unpaused, it can never be paused
+    // once R3T is unpaused, it can never be paused
     function unPause() public onlyOwner {
         paused = false;
     }

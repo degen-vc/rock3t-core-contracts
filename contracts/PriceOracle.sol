@@ -37,7 +37,7 @@ contract PriceOracle {
         uint112 reserve0;
         uint112 reserve1;
         (reserve0, reserve1, blockTimestampLast) = pair.getReserves();
-        require(reserve0 != 0 && reserve1 != 0, 'ExampleOracleSimple: NO_RESERVES');
+        require(reserve0 != 0 && reserve1 != 0, 'PriceOracle: NO_RESERVES');
 
         uint _priceCumulative;
         (uint _price0Cumulative, uint _price1Cumulative, uint32 _blockTimestamp) =
@@ -75,7 +75,7 @@ contract PriceOracle {
         }
         uint _priceCumulativeLast = priceCumulativeLast;
         uint _blockTimestampLast = blockTimestampLast;
-        // Most recent price is already calculated.
+        // most recent price is already calculated.
         if (_blockTimestamp == _blockTimestampLast) {
             return priceLast;
         }
