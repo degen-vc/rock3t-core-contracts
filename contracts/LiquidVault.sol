@@ -27,15 +27,15 @@ contract LiquidVault is Ownable {
 
     bool private locked;
 
-    // Lock period constants
+    // lock period constants
     bytes16 internal constant LMAX_LMIN = 0x4015d556000000000000000000000000; // Lmax - Lmin
     bytes16 internal constant BETA = 0xc03c4a074c14c4eb3800000000000000; // // -beta = -2.97263250118e18
     bytes16 internal constant LMIN = 0x400f5180000000000000000000000000; // Lmin
 
-    // Buy pressure constants
+    // buy pressure constants
     bytes16 internal constant MAX_FEE = 0x40044000000000000000000000000000; // 40%
 
-    // Lock percentage constants
+    // lock percentage constants
     bytes16 internal constant ONE_BYTES = 0x3fff0000000000000000000000000000; // 1
     bytes16 internal constant ONE_TOKEN_BYTES = 0x403abc16d674ec800000000000000000; // 1e18
 
@@ -70,15 +70,13 @@ contract LiquidVault is Ownable {
     }
 
     struct LockPercentageVariables {
-        bytes16 dMax; //maximum lock percentage
-        bytes16 p0; //normal price
-        bytes16 d0; //normal permanent lock percentage
-        bytes16 beta; //Calibration coefficient
+        bytes16 dMax; // maximum lock percentage
+        bytes16 p0; // normal price
+        bytes16 d0; // normal permanent lock percentage
+        bytes16 beta; // сalibration coefficient
     }
 
-    /*
-        A user can hold multiple locked LP batches. Each batch takes 30 days to incubate
-    */
+    // a user can hold multiple locked LP batches
     event LPQueued(
         address holder,
         uint amount,
@@ -152,6 +150,8 @@ contract LiquidVault is Ownable {
         require(config.R3T.transfer(treasury, amount), 'Treasury transfer failed');
     }
 
+    // splits the amount of ETH according to a buy pressure formula, swaps the splitted fee, 
+    // and pools the remaining ETH with R3T to create LP tokens
     function purchaseLPFor(address beneficiary) public payable lock {
         require(msg.value > 0, 'R3T: eth required to mint R3T LP');
         config.feeDistributor.distributeFees();
@@ -219,11 +219,12 @@ contract LiquidVault is Ownable {
         );
     }
 
-    //send eth to match with HCORE tokens in LiquidVault
+    // send ETH to match with R3T tokens in LiquidVault
     function purchaseLP() public payable {
         purchaseLPFor(msg.sender);
     }
 
+    // claimps the oldest LP batch according to the lock period formula
     function claimLP() public returns (bool)  {
         uint length = lockedLP[msg.sender].length;
         require(length > 0, 'R3T: No locked LP.');
