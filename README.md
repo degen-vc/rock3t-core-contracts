@@ -7,6 +7,7 @@ The main contracts are LiquidVault for sending ETH and pooling it with R3T to cr
 
 ## Tests and setup
 ### Prerequisites 
+- [node v10.16.0](https://www.npmjs.com/package/node/v/10.16.0)
 - [ganache-cli](https://github.com/trufflesuite/ganache-cli) [v6.12.1](https://github.com/trufflesuite/ganache-cli/releases/tag/v6.12.1)
 - [solidity](https://github.com/ethereum/solidity) [v0.7.1](https://github.com/ethereum/solidity/releases/tag/v0.7.1)
 
@@ -15,15 +16,7 @@ The main contracts are LiquidVault for sending ETH and pooling it with R3T to cr
 ```
 npm run ganache
 ```
-or
-```
-ganache-cli -e 12000
-```
 2. Run the tests:
 ```
 npm run test
-```
-or
-```
-truffle test
 ```
