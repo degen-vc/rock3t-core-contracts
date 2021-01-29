@@ -1,6 +1,6 @@
 const Ganache = require('./helpers/ganache');
 const deployUniswap = require('./helpers/deployUniswap');
-const { expectEvent, expectRevert, constants } = require("@openzeppelin/test-helpers");
+const { expectRevert } = require("@openzeppelin/test-helpers");
 
 const FeeDistributor = artifacts.require('FeeDistributor');
 const RocketToken = artifacts.require('RocketToken');
@@ -281,4 +281,50 @@ contract('liquid vault', function(accounts) {
       assertBNequal(res, '7776000');
     });
   });
+
+  describe('force unlock LP', async () => {
+    it('should be possible to force unlock LP for an owner', async () => {
+      assert.isFalse(await liquidVault.forceUnlock());
+      await liquidVault.enableLPForceUnlock();
+      assert.isTrue(await liquidVault.forceUnlock());
+    });
+
+    it('should NOT be possible to force unlock LP for NOT an owner', async () => {
+      assert.isFalse(await liquidVault.forceUnlock());
+
+      await expectRevert(
+        liquidVault.enableLPForceUnlock({from: NOT_OWNER}),
+        'Ownable: caller is not the owner'
+      )
+      assert.isFalse(await liquidVault.forceUnlock());
+    });
+
+    it('should return 0 time locked period if force unlocked', async () => {
+      const liquidityTokensAmount = 1100000; // 0.0011 tokens
+      const liquidityEtherAmount = bn('10000').mul(baseUnit); // 1.0000 ETH
+
+      const pair = await IUniswapV2Pair.at(uniswapPair);
+
+      await rocketToken.approve(uniswapRouter.address, liquidityTokensAmount);
+      await uniswapRouter.addLiquidityETH(
+        rocketToken.address,
+        liquidityTokensAmount,
+        0,
+        0,
+        OWNER,
+        new Date().getTime() + 3000,
+        {value: liquidityEtherAmount}
+      );
+
+      assertBNequal(await liquidVault.getLockedPeriod(), '86400');
+
+      await liquidVault.enableLPForceUnlock();
+      assert.isTrue(await liquidVault.forceUnlock());
+
+      assertBNequal(await liquidVault.getLockedPeriod(), '0');
+
+
+    });
+  });
+
 });
