@@ -72,7 +72,7 @@ contract('liquid vault', function(accounts) {
       )
     });
 
-    it('should return 7521622 seconds (87 days) with 10 ETH and 1000 R3T in reserves', async () => {
+    it('should return 3413458 seconds (39.5 days) with 10 ETH and 1000 R3T in reserves', async () => {
       const liquidityTokensAmount = bn('1000').mul(baseUnit); // 1.000 tokens
       const liquidityEtherAmount = bn('10').mul(baseUnit); // 10 ETH
 
@@ -94,11 +94,11 @@ contract('liquid vault', function(accounts) {
       );
 
       const res = await liquidVault.getLockedPeriod();
-
-      assertBNequal(res, '7521622');
+      
+      assertBNequal(res, '3413458');
     });
 
-    it('should return 3402745 seconds (39.3 days) with 500 ETH and 100k R3T in reserves', async () => {
+    it('should return 222018 seconds (2.5 days) with 500 ETH and 100k R3T in reserves', async () => {
       const liquidityTokensAmount = bn('100000').mul(baseUnit); // 100.000 tokens
       const liquidityEtherAmount = bn('500').mul(baseUnit); // 500 ETH
 
@@ -121,11 +121,10 @@ contract('liquid vault', function(accounts) {
 
       const res = await liquidVault.getLockedPeriod();
 
-
-      assertBNequal(res, '3402745');
+      assertBNequal(res, '222018');
     });
 
-    it('should return 7275660 seconds (84 days) with 100 ETH and 50k R3T', async () => {
+    it('should return 2998153 seconds (34.7 days) with 100 ETH and 50k R3T', async () => {
       const liquidityTokensAmount = bn('50000').mul(baseUnit); // 50.000 tokens
       const liquidityEtherAmount = bn('100').mul(baseUnit); // 100 ETH
 
@@ -148,7 +147,7 @@ contract('liquid vault', function(accounts) {
 
       const res = await liquidVault.getLockedPeriod();
 
-      assertBNequal(res, '7275660');
+      assertBNequal(res, '2998153');
     });
 
     it('should return 86400 seconds (1 day) with 10000 ETH and 300k R3T', async () => {
@@ -177,7 +176,7 @@ contract('liquid vault', function(accounts) {
       assertBNequal(res, '86400');
     });
 
-    it('should return 7776000 seconds (90 days) with 1 WEI and 100000 R3T', async () => {
+    it('should return 3888000 seconds (45 days) with 1 WEI and 100000 R3T', async () => {
       const liquidityTokensAmount = bn('10000').mul(baseUnit); // 100.000 tokens
       const liquidityEtherAmount = 1; // 1 WEI
 
@@ -200,10 +199,10 @@ contract('liquid vault', function(accounts) {
 
       const res = await liquidVault.getLockedPeriod();
 
-      assertBNequal(res, '7776000');
+      assertBNequal(res, '3888000');
     });
 
-    it('should return 7775999 seconds (89.9 days) with 1 WEI and 0.0011 R3T', async () => {
+    it('should return 3887999 seconds (44.9 days) with 1 WEI and 0.0011 R3T', async () => {
       const liquidityTokensAmount = 1100000; // 0.0011 tokens
       const liquidityEtherAmount = 1; // 1 WEI
 
@@ -226,7 +225,7 @@ contract('liquid vault', function(accounts) {
 
       const res = await liquidVault.getLockedPeriod();
 
-      assertBNequal(res, '7775999');
+      assertBNequal(res, '3887999');
     });
 
     it('should return 86400 seconds (1 days) with 1000 ETH and 0.0011 R3T', async () => {
@@ -255,7 +254,7 @@ contract('liquid vault', function(accounts) {
       assertBNequal(res, '86400');
     });
 
-    it('should return 7776000 seconds (90 days) with 1 WEI and 300000 R3T', async () => {
+    it('should return 3888000 seconds (45 days) with 1 WEI and 300000 R3T', async () => {
       const liquidityTokensAmount = bn('300000').mul(baseUnit); // 300.000 tokens
       const liquidityEtherAmount = 1; // 1 WEI
 
@@ -278,7 +277,7 @@ contract('liquid vault', function(accounts) {
 
       const res = await liquidVault.getLockedPeriod();
 
-      assertBNequal(res, '7776000');
+      assertBNequal(res, '3888000');
     });
   });
 

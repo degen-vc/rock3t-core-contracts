@@ -29,8 +29,8 @@ contract LiquidVault is Ownable {
     bool public forceUnlock;
 
     // lock period constants
-    bytes16 internal constant LMAX_LMIN = 0x4015d556000000000000000000000000; // Lmax - Lmin
-    bytes16 internal constant BETA = 0xc03c4a074c14c4eb3800000000000000; // // -beta = -2.97263250118e18
+    bytes16 internal constant LMAX_LMIN = 0x4014d010000000000000000000000000; // Lmax - Lmin
+    bytes16 internal constant BETA = 0xc03a4d1120d7b1600000000000000000; // // -beta = -0.75
     bytes16 internal constant LMIN = 0x400f5180000000000000000000000000; // Lmin
 
     // buy pressure constants
@@ -284,7 +284,7 @@ contract LiquidVault is Ownable {
                     ABDKMathQuad.exp(
                         ABDKMathQuad.div(
                             systemHealth,
-                            BETA // -beta = -2.97263250118e18
+                            BETA // -beta = -0.75
                         )
                     )
                 ),
