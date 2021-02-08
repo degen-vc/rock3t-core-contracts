@@ -4,7 +4,6 @@ const FeeApprover = artifacts.require('FeeApprover');
 const FeeDistributor = artifacts.require('FeeDistributor');
 const RocketToken = artifacts.require('RocketToken');
 const LiquidVault = artifacts.require('LiquidVault');
-const SlidingWindowOracle = artifacts.require('SlidingWindowOracle');
 const PriceOracle = artifacts.require('PriceOracle');
 
 const { 
