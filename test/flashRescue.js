@@ -332,12 +332,5 @@ contract('flash rescue', function(accounts) {
       assert.equal(await liquidVault.owner(), flashRescue.address);
       await flashRescue.returnOwnershipOfLvWithoutWithdraw();
       assert.equal(await liquidVault.owner(), OWNER);
-
-
-
-
-
-
     });
-
   });
