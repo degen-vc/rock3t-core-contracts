@@ -27,6 +27,7 @@ contract LiquidVault is Ownable {
 
     bool private locked;
     bool public forceUnlock;
+    bool public batchInsertionAllowed = true;
 
     // lock period constants
     bytes16 internal constant LMAX_LMIN = 0x4014d010000000000000000000000000; // Lmax - Lmin
@@ -44,6 +45,7 @@ contract LiquidVault is Ownable {
         address holder;
         uint amount;
         uint timestamp;
+        bool claimed;
     }
 
     struct LiquidVaultConfig {
@@ -142,6 +144,24 @@ contract LiquidVault is Ownable {
         config.uniswapOracle = _uniswapOracle;
     }
 
+    function insertUnclaimedBatchFor(address _holder, uint256 _amount, uint256 _timestamp) public onlyOwner {
+        require(batchInsertionAllowed, "R3T: Manual batch insertion is no longer allowed.");
+        require(_amount > 0, "R3T: LP amount should not be zero.");
+        
+        lockedLP[_holder].push(
+            LPbatch({
+                holder: _holder,
+                amount: _amount,
+                timestamp: _timestamp,
+                claimed: false
+            })
+        );
+    }
+
+    function disableManualBatchInsertion() public onlyOwner {
+        batchInsertionAllowed = false;
+    }
+
     function getLockedPeriod() external view returns (uint) {
         return _calculateLockPeriod();
     }
@@ -206,7 +226,8 @@ contract LiquidVault is Ownable {
             LPbatch({
                 holder: beneficiary,
                 amount: liquidityCreated,
-                timestamp: block.timestamp
+                timestamp: block.timestamp,
+                claimed: false
             })
         );
 
@@ -229,19 +250,22 @@ contract LiquidVault is Ownable {
     function claimLP() public returns (bool)  {
         uint length = lockedLP[msg.sender].length;
         require(length > 0, 'R3T: No locked LP.');
-        uint256 oldest = queueCounter[msg.sender];
-        LPbatch memory batch = lockedLP[msg.sender][oldest];
+        uint256 next = queueCounter[msg.sender];
+        require(
+            next < lockedLP[msg.sender].length,
+            "R3T: nothing to claim."
+        );
+        LPbatch storage batch = lockedLP[msg.sender][next];
         uint globalLPLockTime = _calculateLockPeriod();
         require(
             block.timestamp - batch.timestamp > globalLPLockTime,
             'R3T: LP still locked.'
         );
-        oldest = lockedLP[msg.sender].length - 1 == oldest
-            ? oldest
-            : oldest + 1;
-        queueCounter[msg.sender] = oldest;
+        next++;
+        queueCounter[msg.sender] = next;
         uint blackHoleShare = lockPercentageUINT();
         uint blackholeDonation = blackHoleShare.mul(batch.amount).div(1000);
+        batch.claimed = true;
         emit LPClaimed(msg.sender, batch.amount, block.timestamp, blackholeDonation, globalLPLockTime);
         require(config.tokenPair.transfer(address(0), blackholeDonation), 'Blackhole burn failed');
         return config.tokenPair.transfer(batch.holder, batch.amount.sub(blackholeDonation));
