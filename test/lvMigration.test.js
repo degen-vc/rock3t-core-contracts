@@ -10,8 +10,9 @@ const FeeApprover = artifacts.require('FeeApprover');
 const PriceOracle = artifacts.require('PriceOracle');
 
 
-contract('liquid vault', accounts => {
+contract('liquid vault v2 migration', accounts => {
   const ganache = new Ganache(web3);
+  afterEach('revert', ganache.revert);
 
   const bn = (input) => web3.utils.toBN(input);
   const assertBNequal = (bnOne, bnTwo) => assert.equal(bnOne.toString(), bnTwo.toString());
@@ -90,16 +91,8 @@ contract('liquid vault', accounts => {
   it('should fail manual batch insertion for non-owner', async () => {
     const lpAmount = bn('10').mul(baseUnit)
     await expectRevert(
-      liquidVault.insertUnclaimedBatchFor(LP_HOLDER, lpAmount, startTime, {from: NOT_OWNER}),
+      liquidVault.insertUnclaimedBatchFor([LP_HOLDER], [lpAmount], [startTime], {from: NOT_OWNER}),
       'Ownable: caller is not the owner'
-    )
-  })
-
-  it('should fail manual batch insertion if zero LP amount provided', async () => {
-    const lpAmount = 0
-    await expectRevert(
-      liquidVault.insertUnclaimedBatchFor(LP_HOLDER, lpAmount, startTime),
-      'R3T: LP amount should not be zero.'
     )
   })
 
@@ -113,10 +106,10 @@ contract('liquid vault', accounts => {
 
     const liquidVaultsBalance = await lpTokenInstance.balanceOf(liquidVault.address)
     assertBNequal(liquidVaultsBalance, lpAmount)
-    assert.equal(await liquidVault.batchInsertionAllowed(), true)
+    assert.isFalse(await liquidVault.batchInsertionFinished())
 
     //insert a batch to assign LP amount for a holder
-    await liquidVault.insertUnclaimedBatchFor(LP_HOLDER, holdersLpAmount, startTime)
+    await liquidVault.insertUnclaimedBatchFor([LP_HOLDER], [holdersLpAmount], [startTime])
 
     const lpLength = await liquidVault.lockedLPLength(LP_HOLDER)
     assertBNequal(lpLength, 1)
@@ -129,14 +122,13 @@ contract('liquid vault', accounts => {
   })
 
   it('manual batch insertion performed along with the regular purchaseLP', async () => {
-    const lpTokenInstance = await IUniswapV2Pair.at(uniswapPair)
     const holdersLpAmount = bn('4').mul(baseUnit)
     const holdersLpAmountSecond = bn('10000000000000000000')
 
     const lpLengthBefore = await liquidVault.lockedLPLength(LP_HOLDER2)
     assertBNequal(lpLengthBefore, 0)
     
-    await liquidVault.insertUnclaimedBatchFor(LP_HOLDER2, holdersLpAmount, startTime)
+    await liquidVault.insertUnclaimedBatchFor([LP_HOLDER2], [holdersLpAmount], [startTime])
     const lpLengthAfter = await liquidVault.lockedLPLength(LP_HOLDER2)
     assertBNequal(lpLengthAfter, 1)
 
@@ -153,9 +145,23 @@ contract('liquid vault', accounts => {
   })
 
   it('all batches are claimed by lpHolder2 in the correct order', async () => {
-    const lpTokenInstance = await IUniswapV2Pair.at(uniswapPair)
     const holdersLpAmount = bn('4').mul(baseUnit)
     const holdersLpAmountSecond = bn('10000000000000000000')
+
+    const lpTokenInstance = await IUniswapV2Pair.at(uniswapPair)
+
+    const lpAmount = bn('20').mul(baseUnit)
+
+    //transfer the necessary LP amount to the new liquid vault first
+    await lpTokenInstance.transfer(liquidVault.address, lpAmount)
+
+    await liquidVault.lockedLPLength(LP_HOLDER2)
+    
+    await liquidVault.insertUnclaimedBatchFor([LP_HOLDER2], [holdersLpAmount], [startTime])
+    await liquidVault.lockedLPLength(LP_HOLDER2)
+
+    await rocketToken.transfer(liquidVault.address, '1000000000000000000000')
+    await liquidVault.purchaseLP({ value: bn('1').mul(baseUnit), from: LP_HOLDER2 })
 
     const lpLength = await liquidVault.lockedLPLength(LP_HOLDER2)
     assertBNequal(lpLength, 2)
@@ -200,6 +206,30 @@ contract('liquid vault', accounts => {
   })
 
   it('lpHolder2 claim fails when everything is claimed', async () => {
+    const holdersLpAmount = bn('4').mul(baseUnit)
+
+    const lpTokenInstance = await IUniswapV2Pair.at(uniswapPair)
+
+    const lpAmount = bn('20').mul(baseUnit)
+
+    //transfer the necessary LP amount to the new liquid vault first
+    await lpTokenInstance.transfer(liquidVault.address, lpAmount)
+
+    await liquidVault.lockedLPLength(LP_HOLDER2)
+    
+    await liquidVault.insertUnclaimedBatchFor([LP_HOLDER2], [holdersLpAmount], [startTime])
+    await liquidVault.lockedLPLength(LP_HOLDER2)
+
+    await rocketToken.transfer(liquidVault.address, '1000000000000000000000')
+    await liquidVault.purchaseLP({ value: bn('1').mul(baseUnit), from: LP_HOLDER2 })
+
+
+    const lockPeriod = await liquidVault.getLockedPeriod()
+    await ganache.setTime(bn(startTime).add(lockPeriod))
+
+    await liquidVault.claimLP({ from: LP_HOLDER2 })
+    await liquidVault.claimLP({ from: LP_HOLDER2 })
+
     const lpLength = await liquidVault.lockedLPLength(LP_HOLDER2)
     assertBNequal(lpLength, 2)
 
@@ -210,14 +240,36 @@ contract('liquid vault', accounts => {
   })
 
   it('lpHolder2 purchases another batch after all previous batches are claimed', async () => {
+    const holdersLp = bn('4').mul(baseUnit)
+
     const lpTokenInstance = await IUniswapV2Pair.at(uniswapPair)
+
+    const lpAmount = bn('20').mul(baseUnit)
+
+    //transfer the necessary LP amount to the new liquid vault first
+    await lpTokenInstance.transfer(liquidVault.address, lpAmount)
+
+    await liquidVault.lockedLPLength(LP_HOLDER2)
+    
+    await liquidVault.insertUnclaimedBatchFor([LP_HOLDER2], [holdersLp], [startTime])
+    await liquidVault.lockedLPLength(LP_HOLDER2)
+
+    await rocketToken.transfer(liquidVault.address, '1000000000000000000000')
+    await liquidVault.purchaseLP({ value: bn('1').mul(baseUnit), from: LP_HOLDER2 })
+
+
+    const lockPeriod = await liquidVault.getLockedPeriod()
+    await ganache.setTime(bn(startTime).add(lockPeriod))
+
+    await liquidVault.claimLP({ from: LP_HOLDER2 })
+    await liquidVault.claimLP({ from: LP_HOLDER2 })
+
     await ganache.setTime(startTime)
     const purchase = await liquidVault.purchaseLP({ value: bn('1').mul(baseUnit), from: LP_HOLDER2 })
     const holdersLpAmount = purchase.receipt.logs[0].args[1]
     const lpLengthAfter = await liquidVault.lockedLPLength(LP_HOLDER2)
     assertBNequal(lpLengthAfter, 3)
 
-    const lockPeriod = await liquidVault.getLockedPeriod()
     await ganache.setTime(bn(startTime).add(lockPeriod))
     const { holder, amount, timestamp } = await liquidVault.lockedLP(LP_HOLDER2, 2)
     
@@ -241,22 +293,15 @@ contract('liquid vault', accounts => {
     )
   })
 
-  it('manual batch insertion disabling fails for non-owner', async () => {
-    await expectRevert(
-      liquidVault.disableManualBatchInsertion({ from: NOT_OWNER }),
-      'Ownable: caller is not the owner'
-    )
-  })
-
   it('manual batch insertion disabling doesn\'t allow to call insertUnclaimedBatchFor() anymore', async () => {
     const holdersLpAmount = bn('5').mul(baseUnit)
 
-    assert.equal(await liquidVault.batchInsertionAllowed(), true)
-    await liquidVault.disableManualBatchInsertion()
-    assert.equal(await liquidVault.batchInsertionAllowed(), false)
+    assert.isFalse(await liquidVault.batchInsertionFinished())
+    await liquidVault.insertUnclaimedBatchFor([LP_HOLDER], [holdersLpAmount], [startTime])
+    assert.isTrue(await liquidVault.batchInsertionFinished())
 
     await expectRevert(
-      liquidVault.insertUnclaimedBatchFor(LP_HOLDER, holdersLpAmount, startTime),
+      liquidVault.insertUnclaimedBatchFor([LP_HOLDER], [holdersLpAmount], [startTime]),
       'R3T: Manual batch insertion is no longer allowed.'
     )
   })
