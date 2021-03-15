@@ -163,7 +163,9 @@ contract LiquidVault is Ownable {
                 })
             );
         }
+    }
 
+    function finishBatchInsertion() public onlyOwner {
         batchInsertionFinished = true;
     }
 
@@ -286,11 +288,12 @@ contract LiquidVault is Ownable {
         returns (
             address,
             uint,
-            uint
+            uint,
+            bool
         )
     {
         LPbatch memory batch = lockedLP[holder][position];
-        return (batch.holder, batch.amount, batch.timestamp);
+        return (batch.holder, batch.amount, batch.timestamp, batch.claimed);
     }
 
     function _calculateLockPeriod() internal view returns (uint) {

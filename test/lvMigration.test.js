@@ -69,7 +69,6 @@ contract('liquid vault v2 migration', accounts => {
       uniswapOracle.address
     );
 
-    const lpTokenInstance = await IUniswapV2Pair.at(uniswapPair);
     const liquidityTokensAmount = bn('1000').mul(baseUnit); // 1.000 tokens
     const liquidityEtherAmount = bn('10').mul(baseUnit); // 10 ETH
 
@@ -177,7 +176,7 @@ contract('liquid vault v2 migration', accounts => {
     assert.equal(secondBatchClaimed, false)
 
     const lockPeriod = await liquidVault.getLockedPeriod()
-    await ganache.setTime(bn(startTime).add(lockPeriod))
+    await ganache.setTime(bn(startTime).add(bn(lockPeriod.toString())))
 
     const firstClaim = await liquidVault.claimLP({ from: LP_HOLDER2 })
     const lpBalanceAfterFirstClaim = await lpTokenInstance.balanceOf(LP_HOLDER2)
@@ -216,7 +215,7 @@ contract('liquid vault v2 migration', accounts => {
     await lpTokenInstance.transfer(liquidVault.address, lpAmount)
 
     await liquidVault.lockedLPLength(LP_HOLDER2)
-    
+
     await liquidVault.insertUnclaimedBatchFor([LP_HOLDER2], [holdersLpAmount], [startTime])
     await liquidVault.lockedLPLength(LP_HOLDER2)
 
@@ -225,7 +224,7 @@ contract('liquid vault v2 migration', accounts => {
 
 
     const lockPeriod = await liquidVault.getLockedPeriod()
-    await ganache.setTime(bn(startTime).add(lockPeriod))
+    await ganache.setTime(bn(startTime).add(bn(lockPeriod.toString())))
 
     await liquidVault.claimLP({ from: LP_HOLDER2 })
     await liquidVault.claimLP({ from: LP_HOLDER2 })
@@ -259,7 +258,7 @@ contract('liquid vault v2 migration', accounts => {
 
 
     const lockPeriod = await liquidVault.getLockedPeriod()
-    await ganache.setTime(bn(startTime).add(lockPeriod))
+    await ganache.setTime(bn(startTime).add(bn(lockPeriod.toString())))
 
     await liquidVault.claimLP({ from: LP_HOLDER2 })
     await liquidVault.claimLP({ from: LP_HOLDER2 })
@@ -270,7 +269,7 @@ contract('liquid vault v2 migration', accounts => {
     const lpLengthAfter = await liquidVault.lockedLPLength(LP_HOLDER2)
     assertBNequal(lpLengthAfter, 3)
 
-    await ganache.setTime(bn(startTime).add(lockPeriod))
+    await ganache.setTime(bn(startTime).add(bn(lockPeriod.toString())))
     const { holder, amount, timestamp } = await liquidVault.lockedLP(LP_HOLDER2, 2)
     
     assertBNequal(holdersLpAmount, amount)
@@ -298,6 +297,7 @@ contract('liquid vault v2 migration', accounts => {
 
     assert.isFalse(await liquidVault.batchInsertionFinished())
     await liquidVault.insertUnclaimedBatchFor([LP_HOLDER], [holdersLpAmount], [startTime])
+    await liquidVault.finishBatchInsertion();
     assert.isTrue(await liquidVault.batchInsertionFinished())
 
     await expectRevert(
@@ -305,4 +305,261 @@ contract('liquid vault v2 migration', accounts => {
       'R3T: Manual batch insertion is no longer allowed.'
     )
   })
+
+  it('should be possible to fill locked batches via admin function insertUnclaimedBatchFor', async () => {
+    const lpTokenInstance = await IUniswapV2Pair.at(uniswapPair)
+
+    const lpAmount = bn('90').mul(baseUnit)
+
+    //transfer the necessary LP amount to the new liquid vault first
+    await lpTokenInstance.transfer(liquidVault.address, lpAmount)
+
+    await rocketToken.transfer(liquidVault.address, '1000000000000000000000')
+
+
+    assertBNequal(await liquidVault.lockedLPLength(LP_HOLDER2), 0)
+
+    const LP_HOLDER3 = accounts[4];
+    const LP_HOLDER4 = accounts[5];
+    const LP_HOLDER5 = accounts[6];
+
+    const LP_HOLDER_AMOUNT_1 = bn('1').mul(baseUnit).div(bn('10')) // 0.1 LP
+    const LP_HOLDER_AMOUNT_2 = bn('5').mul(baseUnit).div(bn('10')) // 0.5 LP
+    const LP_HOLDER_AMOUNT_3 = bn('1').mul(baseUnit) // 1 LP
+    const LP_HOLDER_AMOUNT_4 = bn('2').mul(baseUnit).div(bn('10')) // 0.2 LP
+    const LP_HOLDER_AMOUNT_5 = bn('2').mul(baseUnit) // 2 LP
+
+    const LP_HOLDERS = [
+      LP_HOLDER, LP_HOLDER2, LP_HOLDER3, LP_HOLDER4, LP_HOLDER5, LP_HOLDER, LP_HOLDER2, LP_HOLDER3, LP_HOLDER4, LP_HOLDER5,
+      LP_HOLDER, LP_HOLDER2, LP_HOLDER3, LP_HOLDER4, LP_HOLDER5, LP_HOLDER, LP_HOLDER2, LP_HOLDER3, LP_HOLDER4, LP_HOLDER5,
+      LP_HOLDER, LP_HOLDER2, LP_HOLDER3, LP_HOLDER4, LP_HOLDER5, LP_HOLDER, LP_HOLDER2, LP_HOLDER3, LP_HOLDER4, LP_HOLDER5,
+      LP_HOLDER, LP_HOLDER2, LP_HOLDER3, LP_HOLDER4, LP_HOLDER5, LP_HOLDER, LP_HOLDER2, LP_HOLDER3, LP_HOLDER4, LP_HOLDER5,
+      LP_HOLDER, LP_HOLDER2, LP_HOLDER3, LP_HOLDER4, LP_HOLDER5, LP_HOLDER, LP_HOLDER2, LP_HOLDER3, LP_HOLDER4, LP_HOLDER5
+    ]
+
+    const LP_HOLDER_AMOUNTS = [
+      LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_2, LP_HOLDER_AMOUNT_3, LP_HOLDER_AMOUNT_4, LP_HOLDER_AMOUNT_5, LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_2, LP_HOLDER_AMOUNT_3, LP_HOLDER_AMOUNT_4, LP_HOLDER_AMOUNT_5,
+      LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_2, LP_HOLDER_AMOUNT_3, LP_HOLDER_AMOUNT_4, LP_HOLDER_AMOUNT_5, LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_2, LP_HOLDER_AMOUNT_3, LP_HOLDER_AMOUNT_4, LP_HOLDER_AMOUNT_5,
+      LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_2, LP_HOLDER_AMOUNT_3, LP_HOLDER_AMOUNT_4, LP_HOLDER_AMOUNT_5, LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_2, LP_HOLDER_AMOUNT_3, LP_HOLDER_AMOUNT_4, LP_HOLDER_AMOUNT_5,
+      LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_2, LP_HOLDER_AMOUNT_3, LP_HOLDER_AMOUNT_4, LP_HOLDER_AMOUNT_5, LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_2, LP_HOLDER_AMOUNT_3, LP_HOLDER_AMOUNT_4, LP_HOLDER_AMOUNT_5,
+      LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_2, LP_HOLDER_AMOUNT_3, LP_HOLDER_AMOUNT_4, LP_HOLDER_AMOUNT_5, LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_2, LP_HOLDER_AMOUNT_3, LP_HOLDER_AMOUNT_4, LP_HOLDER_AMOUNT_5
+    ]
+
+    const startTime2 = startTime + 3600
+    const startTime3 = startTime + 7200
+    const startTime4 = startTime + 9000
+    const startTime5 = startTime + 15000
+
+    const LOCK_START_TIME = [
+      startTime, startTime2, startTime3, startTime4, startTime5, startTime, startTime2, startTime3, startTime4, startTime5,
+      startTime, startTime2, startTime3, startTime4, startTime5, startTime, startTime2, startTime3, startTime4, startTime5,
+      startTime, startTime2, startTime3, startTime4, startTime5, startTime, startTime2, startTime3, startTime4, startTime5,
+      startTime, startTime2, startTime3, startTime4, startTime5, startTime, startTime2, startTime3, startTime4, startTime5,
+      startTime, startTime2, startTime3, startTime4, startTime5, startTime, startTime2, startTime3, startTime4, startTime5
+    ]
+
+    const result = await liquidVault.insertUnclaimedBatchFor(LP_HOLDERS, LP_HOLDER_AMOUNTS, LOCK_START_TIME);
+    //GAS Price - 200GWEI
+    //GAS USED - 3.432.885
+    console.log(`gasUsed on 50 insertions via insertUnclaimedBatchFor: ${result.receipt.gasUsed}`)
+
+    assertBNequal(await liquidVault.lockedLPLength(LP_HOLDER), 10);
+    assertBNequal(await liquidVault.lockedLPLength(LP_HOLDER2), 10);
+    assertBNequal(await liquidVault.lockedLPLength(LP_HOLDER3), 10);
+    assertBNequal(await liquidVault.lockedLPLength(LP_HOLDER4), 10);
+    assertBNequal(await liquidVault.lockedLPLength(LP_HOLDER5), 10);
+  })
+
+  it('should not be possible to use insertUnclaimedBatchFor if holders and amounts arrays has different length', async () => {
+    const lpTokenInstance = await IUniswapV2Pair.at(uniswapPair)
+
+    const lpAmount = bn('90').mul(baseUnit)
+
+    //transfer the necessary LP amount to the new liquid vault first
+    await lpTokenInstance.transfer(liquidVault.address, lpAmount)
+
+    await rocketToken.transfer(liquidVault.address, '1000000000000000000000')
+
+
+    assertBNequal(await liquidVault.lockedLPLength(LP_HOLDER2), 0)
+
+    const LP_HOLDER3 = accounts[4];
+    const LP_HOLDER_AMOUNT_1 = bn('1').mul(baseUnit).div(bn('10')) // 0.1 LP
+
+    await expectRevert(
+      liquidVault.insertUnclaimedBatchFor([LP_HOLDER2, LP_HOLDER3, LP_HOLDER3], [LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_1], [startTime, startTime]),
+      'R3T: Batch arrays should have same length'
+    )
+
+    assertBNequal(await liquidVault.lockedLPLength(LP_HOLDER2), 0);
+  })
+
+  it('should not be possible to use insertUnclaimedBatchFor if unlockTime and amounts arrays has different length', async () => {
+    const lpTokenInstance = await IUniswapV2Pair.at(uniswapPair)
+
+    const lpAmount = bn('90').mul(baseUnit)
+
+    //transfer the necessary LP amount to the new liquid vault first
+    await lpTokenInstance.transfer(liquidVault.address, lpAmount)
+
+    await rocketToken.transfer(liquidVault.address, '1000000000000000000000')
+
+
+    assertBNequal(await liquidVault.lockedLPLength(LP_HOLDER2), 0)
+
+    const LP_HOLDER3 = accounts[4];
+    const LP_HOLDER_AMOUNT_1 = bn('1').mul(baseUnit).div(bn('10')) // 0.1 LP
+
+    await expectRevert(
+      liquidVault.insertUnclaimedBatchFor([LP_HOLDER2, LP_HOLDER3], [LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_1], [startTime, startTime, startTime]),
+      'R3T: Batch arrays should have same length'
+    )
+
+    assertBNequal(await liquidVault.lockedLPLength(LP_HOLDER2), 0);
+  })
+
+  //sometimes failing due to time set in ganache CLI bug
+  it.skip('should be possible to claim manually inserted LPs, to claim new Unlocked LPs, not possible to claim still not claimable LPs', async () => {
+    const lpTokenInstance = await IUniswapV2Pair.at(uniswapPair)
+
+    const lpAmount = bn('90').mul(baseUnit)
+
+    //transfer the necessary LP amount to the new liquid vault first
+    await lpTokenInstance.transfer(liquidVault.address, lpAmount)
+
+    await rocketToken.transfer(liquidVault.address, '1000000000000000000000')
+
+
+    assertBNequal(await liquidVault.lockedLPLength(LP_HOLDER2), 0)
+
+    const LP_HOLDER3 = accounts[4];
+    const LP_HOLDER4 = accounts[5];
+    const LP_HOLDER5 = accounts[6];
+
+    const LP_HOLDER_AMOUNT_1 = bn('1').mul(baseUnit).div(bn('10')) // 0.1 LP
+    const LP_HOLDER_AMOUNT_2 = bn('5').mul(baseUnit).div(bn('10')) // 0.5 LP
+    const LP_HOLDER_AMOUNT_3 = bn('1').mul(baseUnit) // 1 LP
+    const LP_HOLDER_AMOUNT_4 = bn('2').mul(baseUnit).div(bn('10')) // 0.2 LP
+    const LP_HOLDER_AMOUNT_5 = bn('2').mul(baseUnit) // 2 LP
+
+    const LP_HOLDERS = [
+      LP_HOLDER, LP_HOLDER2, LP_HOLDER3, LP_HOLDER4, LP_HOLDER5, LP_HOLDER, LP_HOLDER2, LP_HOLDER3, LP_HOLDER4, LP_HOLDER5,
+      LP_HOLDER, LP_HOLDER2, LP_HOLDER3, LP_HOLDER4, LP_HOLDER5, LP_HOLDER, LP_HOLDER2, LP_HOLDER3, LP_HOLDER4, LP_HOLDER5,
+      LP_HOLDER, LP_HOLDER2, LP_HOLDER3, LP_HOLDER4, LP_HOLDER5, LP_HOLDER, LP_HOLDER2, LP_HOLDER3, LP_HOLDER4, LP_HOLDER5,
+      LP_HOLDER, LP_HOLDER2, LP_HOLDER3, LP_HOLDER4, LP_HOLDER5, LP_HOLDER, LP_HOLDER2, LP_HOLDER3, LP_HOLDER4, LP_HOLDER5,
+      LP_HOLDER, LP_HOLDER2, LP_HOLDER3, LP_HOLDER4, LP_HOLDER5, LP_HOLDER, LP_HOLDER2, LP_HOLDER3, LP_HOLDER4, LP_HOLDER5
+    ]
+
+    const LP_HOLDER_AMOUNTS = [
+      LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_2, LP_HOLDER_AMOUNT_3, LP_HOLDER_AMOUNT_4, LP_HOLDER_AMOUNT_5, LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_2, LP_HOLDER_AMOUNT_3, LP_HOLDER_AMOUNT_4, LP_HOLDER_AMOUNT_5,
+      LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_2, LP_HOLDER_AMOUNT_3, LP_HOLDER_AMOUNT_4, LP_HOLDER_AMOUNT_5, LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_2, LP_HOLDER_AMOUNT_3, LP_HOLDER_AMOUNT_4, LP_HOLDER_AMOUNT_5,
+      LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_2, LP_HOLDER_AMOUNT_3, LP_HOLDER_AMOUNT_4, LP_HOLDER_AMOUNT_5, LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_2, LP_HOLDER_AMOUNT_3, LP_HOLDER_AMOUNT_4, LP_HOLDER_AMOUNT_5,
+      LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_2, LP_HOLDER_AMOUNT_3, LP_HOLDER_AMOUNT_4, LP_HOLDER_AMOUNT_5, LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_2, LP_HOLDER_AMOUNT_3, LP_HOLDER_AMOUNT_4, LP_HOLDER_AMOUNT_5,
+      LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_2, LP_HOLDER_AMOUNT_3, LP_HOLDER_AMOUNT_4, LP_HOLDER_AMOUNT_5, LP_HOLDER_AMOUNT_1, LP_HOLDER_AMOUNT_2, LP_HOLDER_AMOUNT_3, LP_HOLDER_AMOUNT_4, LP_HOLDER_AMOUNT_5
+    ]
+
+    const startTime2 = startTime + 3600
+    const startTime3 = startTime + 7200
+    const startTime4 = startTime + 9000
+    const startTime5 = startTime + 15000
+
+    const LOCK_START_TIME = [
+      startTime, startTime2, startTime3, startTime4, startTime5, startTime, startTime2, startTime3, startTime4, startTime5,
+      startTime, startTime2, startTime3, startTime4, startTime5, startTime, startTime2, startTime3, startTime4, startTime5,
+      startTime, startTime2, startTime3, startTime4, startTime5, startTime, startTime2, startTime3, startTime4, startTime5,
+      startTime, startTime2, startTime3, startTime4, startTime5, startTime, startTime2, startTime3, startTime4, startTime5,
+      startTime, startTime2, startTime3, startTime4, startTime5, startTime, startTime2, startTime3, startTime4, startTime5
+    ]
+
+
+    await ganache.setTime(startTime)
+
+    const result = await liquidVault.insertUnclaimedBatchFor(LP_HOLDERS, LP_HOLDER_AMOUNTS, LOCK_START_TIME);
+    //GAS Price - 200GWEI
+    //GAS USED - 3.432.885
+    console.log(`gasUsed on 50 insertions via insertUnclaimedBatchFor: ${result.receipt.gasUsed}`)
+
+    assertBNequal(await liquidVault.lockedLPLength(LP_HOLDER), 10);
+    assertBNequal(await liquidVault.lockedLPLength(LP_HOLDER2), 10);
+    assertBNequal(await liquidVault.lockedLPLength(LP_HOLDER3), 10);
+    assertBNequal(await liquidVault.lockedLPLength(LP_HOLDER4), 10);
+    assertBNequal(await liquidVault.lockedLPLength(LP_HOLDER5), 10);
+
+    const lockPeriod = await liquidVault.getLockedPeriod()
+
+
+    const purchaseOne = await liquidVault.purchaseLP({ value: bn('3').mul(baseUnit), from: LP_HOLDER2 })
+    const holdersLpAmountOne = purchaseOne.receipt.logs[0].args[1]
+
+    await ganache.setTime(bn(startTime).add(bn(50000)))
+
+    assertBNequal(await liquidVault.lockedLPLength(LP_HOLDER2), 11);
+
+    const purchaseTwo = await liquidVault.purchaseLP({ value: bn('2').mul(baseUnit), from: LP_HOLDER2 })
+    const holdersLpAmountTwo = purchaseTwo.receipt.logs[0].args[1]
+    assertBNequal(await liquidVault.lockedLPLength(LP_HOLDER2), 12);
+
+    await ganache.setTime(bn(startTime).add(lockPeriod))
+
+    const lvTotalLP = lpAmount.add(holdersLpAmountOne).add(holdersLpAmountTwo)
+
+    assertBNequal(lvTotalLP, await lpTokenInstance.balanceOf(liquidVault.address))
+    await liquidVault.claimLP({ from: LP_HOLDER2 })
+    assertBNequal(lvTotalLP.sub(LP_HOLDER_AMOUNT_2), await lpTokenInstance.balanceOf(liquidVault.address))
+
+    await liquidVault.claimLP({ from: LP_HOLDER2 })
+    assertBNequal(lvTotalLP.sub(LP_HOLDER_AMOUNT_2.mul(bn(2))), await lpTokenInstance.balanceOf(liquidVault.address))
+
+    await liquidVault.claimLP({ from: LP_HOLDER2 })
+    assertBNequal(lvTotalLP.sub(LP_HOLDER_AMOUNT_2.mul(bn(3))), await lpTokenInstance.balanceOf(liquidVault.address))
+
+    await liquidVault.claimLP({ from: LP_HOLDER2 })
+    assertBNequal(lvTotalLP.sub(LP_HOLDER_AMOUNT_2.mul(bn(4))), await lpTokenInstance.balanceOf(liquidVault.address))
+
+    await liquidVault.claimLP({ from: LP_HOLDER2 })
+    assertBNequal(lvTotalLP.sub(LP_HOLDER_AMOUNT_2.mul(bn(5))), await lpTokenInstance.balanceOf(liquidVault.address))
+
+    await liquidVault.claimLP({ from: LP_HOLDER2 })
+    assertBNequal(lvTotalLP.sub(LP_HOLDER_AMOUNT_2.mul(bn(6))), await lpTokenInstance.balanceOf(liquidVault.address))
+
+    await liquidVault.claimLP({ from: LP_HOLDER2 })
+    assertBNequal(lvTotalLP.sub(LP_HOLDER_AMOUNT_2.mul(bn(7))), await lpTokenInstance.balanceOf(liquidVault.address))
+
+    await liquidVault.claimLP({ from: LP_HOLDER2 })
+    assertBNequal(lvTotalLP.sub(LP_HOLDER_AMOUNT_2.mul(bn(8))), await lpTokenInstance.balanceOf(liquidVault.address))
+
+    await liquidVault.claimLP({ from: LP_HOLDER2 })
+    assertBNequal(lvTotalLP.sub(LP_HOLDER_AMOUNT_2.mul(bn(9))), await lpTokenInstance.balanceOf(liquidVault.address))
+
+    await liquidVault.claimLP({ from: LP_HOLDER2 })
+    assertBNequal(lvTotalLP.sub(LP_HOLDER_AMOUNT_2.mul(bn(10))), await lpTokenInstance.balanceOf(liquidVault.address))
+
+    // new batches
+    assertBNequal(await liquidVault.queueCounter(LP_HOLDER2), 10)
+
+    const lockedLpData = await liquidVault.getLockedLP(LP_HOLDER2, 10)
+    assert.equal(lockedLpData[0], LP_HOLDER2)
+    assertBNequal(lockedLpData[1], holdersLpAmountOne)
+    assert.isFalse(lockedLpData[3]);
+
+
+    await liquidVault.claimLP({ from: LP_HOLDER2 })
+    assertBNequal(lvTotalLP.sub(LP_HOLDER_AMOUNT_2.mul(bn(10))).sub(holdersLpAmountOne), await lpTokenInstance.balanceOf(liquidVault.address))
+
+    await expectRevert(
+      liquidVault.claimLP({ from: LP_HOLDER2 }),
+      'R3T: LP still locked.'
+    );
+
+    await ganache.setTime(bn(startTime).add(lockPeriod).add(bn(50020)))
+
+    await liquidVault.claimLP({ from: LP_HOLDER2 })
+    assertBNequal(lvTotalLP.sub(LP_HOLDER_AMOUNT_2.mul(bn(10))).sub(holdersLpAmountOne).sub(holdersLpAmountTwo), await lpTokenInstance.balanceOf(liquidVault.address))
+
+    await expectRevert(
+      liquidVault.claimLP({ from: LP_HOLDER2 }),
+      'R3T: nothing to claim.'
+    )
+  })
+
 })
