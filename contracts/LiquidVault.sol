@@ -23,7 +23,7 @@ contract LiquidVault is Ownable {
 
     address public treasury;
     mapping(address => LPbatch[]) public lockedLP;
-    mapping(address => uint256) public queueCounter;
+    mapping(address => uint) public queueCounter;
 
     bool private locked;
     bool public forceUnlock;
@@ -44,6 +44,7 @@ contract LiquidVault is Ownable {
         address holder;
         uint amount;
         uint timestamp;
+        bool claimed;
     }
 
     struct LiquidVaultConfig {
@@ -206,7 +207,8 @@ contract LiquidVault is Ownable {
             LPbatch({
                 holder: beneficiary,
                 amount: liquidityCreated,
-                timestamp: block.timestamp
+                timestamp: block.timestamp,
+                claimed: false
             })
         );
 
@@ -227,21 +229,22 @@ contract LiquidVault is Ownable {
 
     // claimps the oldest LP batch according to the lock period formula
     function claimLP() public returns (bool)  {
-        uint length = lockedLP[msg.sender].length;
-        require(length > 0, 'R3T: No locked LP.');
-        uint256 oldest = queueCounter[msg.sender];
-        LPbatch memory batch = lockedLP[msg.sender][oldest];
+        uint next = queueCounter[msg.sender];
+        require(
+            next < lockedLP[msg.sender].length,
+            "R3T: nothing to claim."
+        );
+        LPbatch storage batch = lockedLP[msg.sender][next];
         uint globalLPLockTime = _calculateLockPeriod();
         require(
             block.timestamp - batch.timestamp > globalLPLockTime,
             'R3T: LP still locked.'
         );
-        oldest = lockedLP[msg.sender].length - 1 == oldest
-            ? oldest
-            : oldest + 1;
-        queueCounter[msg.sender] = oldest;
+        next++;
+        queueCounter[msg.sender] = next;
         uint blackHoleShare = lockPercentageUINT();
         uint blackholeDonation = blackHoleShare.mul(batch.amount).div(1000);
+        batch.claimed = true;
         emit LPClaimed(msg.sender, batch.amount, block.timestamp, blackholeDonation, globalLPLockTime);
         require(config.tokenPair.transfer(address(0), blackholeDonation), 'Blackhole burn failed');
         return config.tokenPair.transfer(batch.holder, batch.amount.sub(blackholeDonation));
@@ -257,11 +260,12 @@ contract LiquidVault is Ownable {
         returns (
             address,
             uint,
-            uint
+            uint,
+            bool
         )
     {
         LPbatch memory batch = lockedLP[holder][position];
-        return (batch.holder, batch.amount, batch.timestamp);
+        return (batch.holder, batch.amount, batch.timestamp, batch.claimed);
     }
 
     function _calculateLockPeriod() internal view returns (uint) {
