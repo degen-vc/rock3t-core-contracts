@@ -27,7 +27,6 @@ contract LiquidVault is Ownable {
 
     bool private locked;
     bool public forceUnlock;
-    bool public batchInsertionFinished;
 
     // lock period constants
     bytes16 internal constant LMAX_LMIN = 0x4014d010000000000000000000000000; // Lmax - Lmin
@@ -144,31 +143,6 @@ contract LiquidVault is Ownable {
         config.uniswapOracle = _uniswapOracle;
     }
 
-    // Dev note: increase gasLimit to be able run up to 100 iterations
-    function insertUnclaimedBatchFor(address[] memory _holders, uint[] memory _amounts, uint[] memory _timestamps) public onlyOwner {
-        require(!batchInsertionFinished, "R3T: Manual batch insertion is no longer allowed.");
-        require(
-            _holders.length == _holders.length && _timestamps.length == _holders.length,
-            "R3T: Batch arrays should have same length"
-        );
-        require(_holders.length <= 100, 'R3T: loop limitations reached');
-
-        for (uint i = 0; i < _holders.length; i++) {
-            lockedLP[_holders[i]].push(
-                LPbatch({
-                    holder: _holders[i],
-                    amount: _amounts[i],
-                    timestamp: _timestamps[i],
-                    claimed: false
-                })
-            );
-        }
-    }
-
-    function finishBatchInsertion() public onlyOwner {
-        batchInsertionFinished = true;
-    }
-
     function getLockedPeriod() external view returns (uint) {
         return _calculateLockPeriod();
     }
@@ -255,8 +229,6 @@ contract LiquidVault is Ownable {
 
     // claimps the oldest LP batch according to the lock period formula
     function claimLP() public returns (bool)  {
-        uint length = lockedLP[msg.sender].length;
-        require(length > 0, 'R3T: No locked LP.');
         uint next = queueCounter[msg.sender];
         require(
             next < lockedLP[msg.sender].length,
